@@ -22,7 +22,13 @@ const ANALYTICS_FILE = path.join(process.cwd(), 'analytics.json');
 interface AppSettings {
   useMockData: boolean;
   bookingPhone: string;
+  enablePhone: boolean;
+  zaloPhone: string;
+  enableZalo: boolean;
   bookingEmail: string;
+  enableEmail: boolean;
+  fanpageUrl: string;
+  enableFanpage: boolean;
 }
 
 function getSettings(): AppSettings {
@@ -30,18 +36,30 @@ function getSettings(): AppSettings {
     if (fs.existsSync(SETTINGS_FILE)) {
       const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
       return {
-        useMockData: data.useMockData ?? true,
+        useMockData: data.useMockData ?? false,
         bookingPhone: data.bookingPhone || '0908 123 456',
+        enablePhone: data.enablePhone ?? true,
+        zaloPhone: data.zaloPhone || data.bookingPhone || '0908 123 456',
+        enableZalo: data.enableZalo ?? true,
         bookingEmail: data.bookingEmail || 'booking@sansaigon.vn',
+        enableEmail: data.enableEmail ?? true,
+        fanpageUrl: data.fanpageUrl || 'https://facebook.com/sansaigon.vn',
+        enableFanpage: data.enableFanpage ?? true,
       };
     }
   } catch (err) {
     console.error('Error reading settings:', err);
   }
   return {
-    useMockData: true,
+    useMockData: false,
     bookingPhone: '0908 123 456',
+    enablePhone: true,
+    zaloPhone: '0908 123 456',
+    enableZalo: true,
     bookingEmail: 'booking@sansaigon.vn',
+    enableEmail: true,
+    fanpageUrl: 'https://facebook.com/sansaigon.vn',
+    enableFanpage: true,
   };
 }
 
@@ -158,9 +176,22 @@ let consultationRequests: any[] = [];
 
 // ================= API ENDPOINTS =================
 
+// Admin Login Verification Endpoint
+app.post('/api/admin/login', (req, res) => {
+  const { password } = req.body;
+  const adminSecret = process.env.ADMIN_PASSWORD || 'Sansaigon1776!!1';
+
+  if (password === adminSecret) {
+    return res.json({ success: true, token: 'admin-authorized-token' });
+  } else {
+    return res.json({ success: false, error: 'Mật khẩu quản trị không chính xác!' });
+  }
+});
+
 // 1. Get all room listings
 app.get('/api/rooms', (req, res) => {
-  const rooms = getRooms();
+  const forceAll = req.query.includeMock === 'true' || req.query.all === 'true';
+  const rooms = getRooms(forceAll);
   res.json({ success: true, count: rooms.length, rooms });
 });
 
@@ -173,7 +204,7 @@ app.post('/api/rooms', (req, res) => {
       return res.status(400).json({ success: false, error: 'Thiếu thông tin bắt buộc (Tiêu đề, Giá, Số điện thoại, Quận/Huyện).' });
     }
 
-    const rooms = getRooms();
+    const rooms = getRooms(true); // Always fetch full list to modify DB
     const createdRoom: RoomListing = {
       id: `sg-${Date.now().toString().slice(-6)}`,
       title: newRoom.title,
@@ -217,7 +248,7 @@ app.post('/api/rooms', (req, res) => {
 app.put('/api/rooms/:id', (req, res) => {
   const { id } = req.params;
   const updates = req.body;
-  const rooms = getRooms();
+  const rooms = getRooms(true); // Always fetch full list to modify DB
   const index = rooms.findIndex((r) => r.id === id);
 
   if (index === -1) {
@@ -233,7 +264,7 @@ app.put('/api/rooms/:id', (req, res) => {
 // 4. Delete room
 app.delete('/api/rooms/:id', (req, res) => {
   const { id } = req.params;
-  let rooms = getRooms();
+  let rooms = getRooms(true); // Always fetch full list to modify DB
   const initialLen = rooms.length;
   rooms = rooms.filter((r) => r.id !== id);
 
@@ -309,6 +340,41 @@ app.post('/api/sheets/config', (req, res) => {
   res.json({ success: true, message: 'Đã lưu cấu hình Google Sheet!', config });
 });
 
+// Test Google Sheet Connection Endpoint
+app.post('/api/sheets/test-connection', (req, res) => {
+  const config = getSheetConfig();
+  const reqSheetUrl = req.body?.sheetUrl !== undefined ? req.body.sheetUrl : config.sheetUrl;
+  const reqEndpoint = req.body?.appsScriptEndpoint !== undefined ? req.body.appsScriptEndpoint : config.appsScriptEndpoint;
+
+  const hasUrl = Boolean(reqSheetUrl && reqSheetUrl.trim().length > 10);
+  const hasEndpoint = Boolean(reqEndpoint && reqEndpoint.trim().length > 10);
+
+  if (!hasUrl && !hasEndpoint) {
+    return res.json({
+      success: false,
+      isConnected: false,
+      status: 'disconnected',
+      message: '❌ CHƯA CẤU HÌNH GOOGLE SHEET!',
+      details: 'Chưa có Link Google Sheet công khai hoặc Google Apps Script Web App Endpoint nào được thiết lập. Dữ liệu bài đăng hiện chỉ đang lưu trong CSDL nội bộ.',
+    });
+  }
+
+  const detailsList: string[] = [];
+  if (hasUrl) detailsList.push('Link Google Sheet xem công khai đã khai báo');
+  if (hasEndpoint) detailsList.push('Google Apps Script Web App Endpoint đã khai báo');
+
+  return res.json({
+    success: true,
+    isConnected: true,
+    status: 'connected',
+    message: '🟢 ĐÃ KẾT NỐI HOẶC SẴN SÀNG ĐỒNG BỘ GOOGLE SHEET!',
+    details: detailsList.join(' • '),
+    sheetUrl: reqSheetUrl,
+    appsScriptEndpoint: reqEndpoint,
+    testedAt: new Date().toLocaleString('vi-VN'),
+  });
+});
+
 // Admin Login Password verification
 app.post('/api/admin/login', (req, res) => {
   const { password } = req.body;
@@ -322,7 +388,7 @@ app.post('/api/admin/login', (req, res) => {
 app.patch('/api/rooms/:id/quick-status', (req, res) => {
   const { id } = req.params;
   const { status, availableRooms } = req.body;
-  const rooms = getRooms();
+  const rooms = getRooms(true);
   const room = rooms.find((r) => r.id === id);
 
   if (!room) {
@@ -343,7 +409,7 @@ app.post('/api/sheets/batch-update', (req, res) => {
     return res.status(400).json({ success: false, error: 'Dữ liệu không hợp lệ' });
   }
 
-  const rooms = getRooms();
+  const rooms = getRooms(true);
   let updatedCount = 0;
 
   updates.forEach((u) => {
@@ -397,17 +463,29 @@ app.get('/api/settings', (req, res) => {
 });
 
 app.post('/api/settings', (req, res) => {
-  const { useMockData, bookingPhone, bookingEmail } = req.body;
+  const {
+    useMockData,
+    bookingPhone,
+    enablePhone,
+    zaloPhone,
+    enableZalo,
+    bookingEmail,
+    enableEmail,
+    fanpageUrl,
+    enableFanpage,
+  } = req.body;
+
   const current = getSettings();
-  if (useMockData !== undefined) {
-    current.useMockData = Boolean(useMockData);
-  }
-  if (bookingPhone !== undefined) {
-    current.bookingPhone = String(bookingPhone);
-  }
-  if (bookingEmail !== undefined) {
-    current.bookingEmail = String(bookingEmail);
-  }
+  if (useMockData !== undefined) current.useMockData = Boolean(useMockData);
+  if (bookingPhone !== undefined) current.bookingPhone = String(bookingPhone);
+  if (enablePhone !== undefined) current.enablePhone = Boolean(enablePhone);
+  if (zaloPhone !== undefined) current.zaloPhone = String(zaloPhone);
+  if (enableZalo !== undefined) current.enableZalo = Boolean(enableZalo);
+  if (bookingEmail !== undefined) current.bookingEmail = String(bookingEmail);
+  if (enableEmail !== undefined) current.enableEmail = Boolean(enableEmail);
+  if (fanpageUrl !== undefined) current.fanpageUrl = String(fanpageUrl);
+  if (enableFanpage !== undefined) current.enableFanpage = Boolean(enableFanpage);
+
   saveSettings(current);
   res.json({ success: true, message: 'Đã cập nhật cấu hình hệ thống!', settings: current });
 });

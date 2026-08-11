@@ -1,26 +1,45 @@
 import React, { useState } from 'react';
-import { X, MapPin, Phone, MessageCircle, ShieldCheck, CheckCircle2, Calendar, DollarSign, Home, UserCheck, Zap, Droplet, Wifi, Car, Send, Copy, ExternalLink, Sparkles, Gift } from 'lucide-react';
-import { RoomListing } from '../types';
+import { X, MapPin, Phone, MessageCircle, ShieldCheck, CheckCircle2, Calendar, DollarSign, Home, UserCheck, Zap, Droplet, Wifi, Car, Send, Copy, ExternalLink, Sparkles, Gift, Facebook } from 'lucide-react';
+import { RoomListing, ContactSettings } from '../types';
 
 interface ListingDetailModalProps {
   room: RoomListing | null;
   onClose: () => void;
   onRequestConsultation?: (room: RoomListing) => void;
+  contactSettings?: ContactSettings;
   bookingPhone?: string;
 }
 
 export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   room,
   onClose,
-  bookingPhone = '0908 123 456',
+  contactSettings = {
+    bookingPhone: '0908 123 456',
+    enablePhone: true,
+    zaloPhone: '0908 123 456',
+    enableZalo: true,
+    bookingEmail: 'booking@sansaigon.vn',
+    enableEmail: true,
+    fanpageUrl: 'https://facebook.com/sansaigon.vn',
+    enableFanpage: true,
+  },
+  bookingPhone,
 }) => {
   if (!room) return null;
 
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [copiedPhone, setCopiedPhone] = useState(false);
 
-  const contactPhone = room.phone || bookingPhone;
+  const displayPhone = bookingPhone || contactSettings.bookingPhone || '0908 123 456';
+  const contactPhone = room.phone || displayPhone;
+  const enablePhone = contactSettings.enablePhone ?? true;
+  const zaloPhone = room.zalo || contactSettings.zaloPhone || contactPhone;
+  const enableZalo = contactSettings.enableZalo ?? true;
+  const fanpageUrl = contactSettings.fanpageUrl || 'https://facebook.com/sansaigon.vn';
+  const enableFanpage = contactSettings.enableFanpage ?? true;
+
   const phoneClean = contactPhone.replace(/\s+/g, '');
+  const zaloClean = zaloPhone.replace(/\s+/g, '');
 
   const formatVND = (price: number) => {
     return new Intl.NumberFormat('vi-VN').format(price);
@@ -250,31 +269,51 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               
               <div className="text-center sm:text-left">
                 <span className="text-xs text-amber-400 font-extrabold uppercase tracking-wider block mb-1">
-                  ⭐ BẢO BẢO & TƯ VẤN VIÊN SAN SÀI GÒN
+                  ⭐ TƯ VẤN VIÊN SAN SÀI GÒN & CHÍNH CHỦ
                 </span>
                 <p className="text-xs text-slate-300 font-medium">
-                  Liên hệ trực tiếp chính chủ / quản lý phòng theo Hotline: <strong className="text-amber-400 font-bold">{contactPhone}</strong>
+                  {enablePhone ? (
+                    <>Liên hệ xem phòng theo Hotline: <strong className="text-amber-400 font-bold">{contactPhone}</strong></>
+                  ) : (
+                    <>Liên hệ xem phòng trực tiếp qua Zalo hoặc Fanpage</>
+                  )}
                 </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-                <a
-                  href={`tel:${phoneClean}`}
-                  className="w-full sm:w-auto px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-98 cursor-pointer"
-                >
-                  <Phone className="w-4 h-4 fill-white" />
-                  <span>GỌI LIÊN HỆ NGAY</span>
-                </a>
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+                {enablePhone && (
+                  <a
+                    href={`tel:${phoneClean}`}
+                    className="flex-1 sm:flex-initial px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-98 cursor-pointer"
+                  >
+                    <Phone className="w-4 h-4 fill-white" />
+                    <span>GỌI LIÊN HỆ</span>
+                  </a>
+                )}
 
-                <a
-                  href={`https://zalo.me/${phoneClean}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full sm:w-auto px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-98 cursor-pointer"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  <span>CHAT ZALO</span>
-                </a>
+                {enableZalo && (
+                  <a
+                    href={`https://zalo.me/${zaloClean}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 sm:flex-initial px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-98 cursor-pointer"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>CHAT ZALO</span>
+                  </a>
+                )}
+
+                {enableFanpage && (
+                  <a
+                    href={fanpageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 sm:flex-initial px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-98 cursor-pointer"
+                  >
+                    <Facebook className="w-4 h-4 fill-white" />
+                    <span>FANPAGE</span>
+                  </a>
+                )}
               </div>
 
             </div>

@@ -10,12 +10,12 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { AdminPage } from './components/AdminPage';
 import { FloatingContactWidget } from './components/FloatingContactWidget';
 import { Footer } from './components/Footer';
-import { RoomListing, FilterState, ListingType, RoomStatus } from './types';
+import { RoomListing, FilterState, ListingType, RoomStatus, ContactSettings } from './types';
 import { INITIAL_ROOMS } from './data/mockListings';
 import { Building2, Users, ArrowRightLeft, Sparkles, Filter, SlidersHorizontal, MapPin, RefreshCw, AlertCircle, FileSpreadsheet } from 'lucide-react';
 
 export default function App() {
-  const [rooms, setRooms] = useState<RoomListing[]>(INITIAL_ROOMS);
+  const [rooms, setRooms] = useState<RoomListing[]>([]);
   const [loading, setLoading] = useState(true);
 
   // View Mode: 'client' | 'admin'
@@ -42,9 +42,17 @@ export default function App() {
   const [consultationRoomTitle, setConsultationRoomTitle] = useState<string | undefined>(undefined);
   const [consultationRoomId, setConsultationRoomId] = useState<string | undefined>(undefined);
 
-  // App Settings State (Admin Configured Hotline & Email)
-  const [bookingPhone, setBookingPhone] = useState('0908 123 456');
-  const [bookingEmail, setBookingEmail] = useState('booking@sansaigon.vn');
+  // App Settings State (Admin Configured Hotline, Zalo, Email & Fanpage)
+  const [contactSettings, setContactSettings] = useState<ContactSettings>({
+    bookingPhone: '0908 123 456',
+    enablePhone: true,
+    zaloPhone: '0908 123 456',
+    enableZalo: true,
+    bookingEmail: 'booking@sansaigon.vn',
+    enableEmail: true,
+    fanpageUrl: 'https://facebook.com/sansaigon.vn',
+    enableFanpage: true,
+  });
 
   // Fetch rooms from Express backend API
   const fetchRooms = async () => {
@@ -56,7 +64,8 @@ export default function App() {
         setRooms(data.rooms);
       }
     } catch (err) {
-      console.warn('API backend error, fallback to initial mock rooms:', err);
+      console.warn('API backend error, fallback to empty array:', err);
+      setRooms([]);
     } finally {
       setLoading(false);
     }
@@ -67,8 +76,16 @@ export default function App() {
       const res = await fetch('/api/settings');
       const data = await res.json();
       if (data.success && data.settings) {
-        if (data.settings.bookingPhone) setBookingPhone(data.settings.bookingPhone);
-        if (data.settings.bookingEmail) setBookingEmail(data.settings.bookingEmail);
+        setContactSettings({
+          bookingPhone: data.settings.bookingPhone || '0908 123 456',
+          enablePhone: data.settings.enablePhone ?? true,
+          zaloPhone: data.settings.zaloPhone || data.settings.bookingPhone || '0908 123 456',
+          enableZalo: data.settings.enableZalo ?? true,
+          bookingEmail: data.settings.bookingEmail || 'booking@sansaigon.vn',
+          enableEmail: data.settings.enableEmail ?? true,
+          fanpageUrl: data.settings.fanpageUrl || 'https://facebook.com/sansaigon.vn',
+          enableFanpage: data.settings.enableFanpage ?? true,
+        });
       }
     } catch (err) {
       console.error('Error fetching settings:', err);
@@ -245,7 +262,7 @@ export default function App() {
         onOpenAdminModal={() => setViewMode('admin')}
         onOpenConsultationModal={(title) => handleOpenConsultation(title)}
         totalListingsCount={rooms.length}
-        bookingPhone={bookingPhone}
+        bookingPhone={contactSettings.bookingPhone}
       />
 
       {/* Main Search & Hero Filter Banner */}
@@ -337,7 +354,7 @@ export default function App() {
       <ListingDetailModal
         room={selectedRoom}
         onClose={() => setSelectedRoom(null)}
-        bookingPhone={bookingPhone}
+        contactSettings={contactSettings}
       />
 
       <AddListingModal
@@ -368,14 +385,14 @@ export default function App() {
       {/* Floating Circular Contact Widget (Bottom Right) */}
       <FloatingContactWidget
         onOpenAdminModal={() => setViewMode('admin')}
-        bookingPhone={bookingPhone}
+        contactSettings={contactSettings}
       />
 
       {/* Footer */}
       <Footer
         onSelectDistrict={(d) => handleFilterChange({ district: d })}
-        bookingPhone={bookingPhone}
-        bookingEmail={bookingEmail}
+        onOpenAdminModal={() => setViewMode('admin')}
+        contactSettings={contactSettings}
       />
 
     </div>

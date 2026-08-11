@@ -50,6 +50,17 @@ export interface GoogleSheetSyncConfig {
   lastSyncedAt?: string;
 }
 
+export interface ContactSettings {
+  bookingPhone: string;
+  enablePhone: boolean;
+  zaloPhone: string;
+  enableZalo: boolean;
+  bookingEmail: string;
+  enableEmail: boolean;
+  fanpageUrl: string;
+  enableFanpage: boolean;
+}
+
 export interface QuickConsultationForm {
   listingId?: string;
   listingTitle?: string;

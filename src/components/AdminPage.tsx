@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck, FileSpreadsheet, Plus, Trash2, Edit3,
   CheckCircle2, RefreshCw, Phone, User, Building2, Eye, Search, Sparkles, Layers,
-  BarChart3, TrendingUp, Smartphone, Monitor, ArrowLeft, Home, Lock, KeyRound, Clock, MessageSquare, Gift, Settings
+  BarChart3, TrendingUp, Smartphone, Monitor, ArrowLeft, Home, Lock, KeyRound, Clock, MessageSquare, Gift, Settings,
+  Facebook, MessageCircle, Mail, Globe, Power, AlertTriangle
 } from 'lucide-react';
 import { RoomListing, RoomStatus, ListingType } from '../types';
 import { SAIGON_DISTRICTS } from '../data/mockListings';
@@ -40,9 +41,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [loadingConsultations, setLoadingConsultations] = useState(false);
 
   // Analytics & Data Settings State
-  const [useMockData, setUseMockData] = useState<boolean>(true);
+  const [useMockData, setUseMockData] = useState<boolean>(false);
   const [bookingPhone, setBookingPhone] = useState<string>('0908 123 456');
+  const [enablePhone, setEnablePhone] = useState<boolean>(true);
+  const [zaloPhone, setZaloPhone] = useState<string>('0908 123 456');
+  const [enableZalo, setEnableZalo] = useState<boolean>(true);
   const [bookingEmail, setBookingEmail] = useState<string>('booking@sansaigon.vn');
+  const [enableEmail, setEnableEmail] = useState<boolean>(true);
+  const [fanpageUrl, setFanpageUrl] = useState<string>('https://facebook.com/sansaigon.vn');
+  const [enableFanpage, setEnableFanpage] = useState<boolean>(true);
   const [isSavingContact, setIsSavingContact] = useState<boolean>(false);
   const [statsData, setStatsData] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState<boolean>(false);
@@ -50,10 +57,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   // Status Toast Notification
   const [toastMsg, setToastMsg] = useState('');
 
-  // Google Sheet Sync State
+  // Google Sheet Sync & Connection Diagnostic State
   const [sheetUrl, setSheetUrl] = useState('');
   const [appsScriptEndpoint, setAppsScriptEndpoint] = useState('');
   const [isSavingSheetConfig, setIsSavingSheetConfig] = useState(false);
+  const [isTestingSheet, setIsTestingSheet] = useState(false);
+  const [sheetConnectionStatus, setSheetConnectionStatus] = useState<{
+    isConnected: boolean;
+    message: string;
+    details?: string;
+    testedAt?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -76,15 +90,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       if (data.success) {
         setStatsData(data.stats);
         if (data.settings) {
-          if (data.settings.useMockData !== undefined) {
-            setUseMockData(data.settings.useMockData);
-          }
-          if (data.settings.bookingPhone) {
-            setBookingPhone(data.settings.bookingPhone);
-          }
-          if (data.settings.bookingEmail) {
-            setBookingEmail(data.settings.bookingEmail);
-          }
+          if (data.settings.useMockData !== undefined) setUseMockData(data.settings.useMockData);
+          if (data.settings.bookingPhone) setBookingPhone(data.settings.bookingPhone);
+          if (data.settings.enablePhone !== undefined) setEnablePhone(Boolean(data.settings.enablePhone));
+          if (data.settings.zaloPhone) setZaloPhone(data.settings.zaloPhone);
+          if (data.settings.enableZalo !== undefined) setEnableZalo(Boolean(data.settings.enableZalo));
+          if (data.settings.bookingEmail) setBookingEmail(data.settings.bookingEmail);
+          if (data.settings.enableEmail !== undefined) setEnableEmail(Boolean(data.settings.enableEmail));
+          if (data.settings.fanpageUrl) setFanpageUrl(data.settings.fanpageUrl);
+          if (data.settings.enableFanpage !== undefined) setEnableFanpage(Boolean(data.settings.enableFanpage));
         }
       }
     } catch (err) {
@@ -101,11 +115,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingPhone, bookingEmail }),
+        body: JSON.stringify({
+          bookingPhone,
+          enablePhone,
+          zaloPhone,
+          enableZalo,
+          bookingEmail,
+          enableEmail,
+          fanpageUrl,
+          enableFanpage,
+        }),
       });
       const data = await res.json();
       if (data.success) {
-        showToast('✅ Đã lưu Hotline Booking & Email thành công!');
+        showToast('✅ Đã lưu cấu hình liên hệ & fanpage thành công!');
         fetchAnalyticsAndSettings();
       }
     } catch (err) {
@@ -153,30 +176,87 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }
   };
 
+  const testSheetConnection = async () => {
+    setIsTestingSheet(true);
+    try {
+      const res = await fetch('/api/sheets/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheetUrl, appsScriptEndpoint }),
+      });
+      const data = await res.json();
+      setSheetConnectionStatus({
+        isConnected: Boolean(data.isConnected),
+        message: data.message || (data.isConnected ? '🟢 KẾT NỐI GOOGLE SHEET HOẠT ĐỘNG TỐT!' : '❌ CHƯA CẤU HÌNH KẾT NỐI GOOGLE SHEET'),
+        details: data.details,
+        testedAt: data.testedAt || new Date().toLocaleString('vi-VN'),
+      });
+      if (data.isConnected) {
+        showToast('🟢 Kiểm tra kết nối Google Sheet thành công!');
+      }
+    } catch (err) {
+      setSheetConnectionStatus({
+        isConnected: false,
+        message: '❌ Lỗi kết nối đến máy chủ kiểm tra Google Sheet',
+        details: 'Vui lòng thử lại sau',
+        testedAt: new Date().toLocaleString('vi-VN'),
+      });
+    } finally {
+      setIsTestingSheet(false);
+    }
+  };
+
   const fetchSheetConfig = async () => {
     try {
       const res = await fetch('/api/sheets/config');
       const data = await res.json();
       if (data.success && data.config) {
-        setSheetUrl(data.config.sheetUrl || '');
-        setAppsScriptEndpoint(data.config.appsScriptEndpoint || '');
+        const url = data.config.sheetUrl || '';
+        const endpoint = data.config.appsScriptEndpoint || '';
+        setSheetUrl(url);
+        setAppsScriptEndpoint(endpoint);
+
+        const hasConfig = Boolean((url && url.trim().length > 10) || (endpoint && endpoint.trim().length > 10));
+        setSheetConnectionStatus({
+          isConnected: hasConfig,
+          message: hasConfig
+            ? '🟢 ĐÃ CẤU HÌNH ĐỒNG BỘ GOOGLE SHEET'
+            : '⚠️ CHƯA KẾT NỐI GOOGLE SHEET! (Dữ liệu bài đăng đang lưu nội bộ)',
+          details: hasConfig
+            ? 'Hệ thống đã nhận link Google Sheet/Endpoint và sẵn sàng đồng bộ.'
+            : 'Hãy nhập Link Google Sheet hoặc Apps Script Web App Endpoint để đồng bộ bài đăng.',
+          testedAt: data.config.lastSyncedAt || new Date().toLocaleString('vi-VN'),
+        });
       }
     } catch (err) {
       console.error('Error fetching sheet config:', err);
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === '123456' || password === 'admin' || password === 'sansaigon') {
-      sessionStorage.setItem('admin_token', 'admin-authorized-token');
-      setIsAuthenticated(true);
-      setLoginError('');
-      fetchConsultations();
-      fetchSheetConfig();
-      fetchAnalyticsAndSettings();
-    } else {
-      setLoginError('Mật khẩu không đúng. Vui lòng thử lại! (Gợi ý: 123456)');
+    setLoginError('');
+
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        sessionStorage.setItem('admin_token', 'admin-authorized-token');
+        setIsAuthenticated(true);
+        setLoginError('');
+        fetchConsultations();
+        fetchSheetConfig();
+        fetchAnalyticsAndSettings();
+      } else {
+        setLoginError(data.error || 'Mật khẩu quản trị không chính xác!');
+      }
+    } catch (err) {
+      setLoginError('Lỗi kết nối máy chủ xác thực');
     }
   };
 
@@ -251,7 +331,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       });
       const data = await res.json();
       if (data.success) {
-        showToast('✅ Đã lưu cấu hình Google Sheet thành công!');
+        showToast('✅ Đã lưu cấu hình Google Sheet!');
+        await testSheetConnection();
       }
     } catch (err) {
       alert('Lỗi khi lưu cấu hình Google Sheet');
@@ -361,7 +442,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Nhập mật khẩu (VD: 123456)"
+                    placeholder="Nhập mật khẩu quản trị hệ thống..."
                     className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-sm font-bold text-white outline-none focus:ring-2 focus:ring-amber-500"
                     autoFocus
                   />
@@ -382,8 +463,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               </button>
             </form>
 
-            <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
-              <span>Gợi ý mật khẩu mặc định: <strong className="text-amber-400 font-mono">123456</strong></span>
+            <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-end text-[11px] text-slate-500">
               <button
                 onClick={onBackToClient}
                 className="text-slate-400 hover:text-white underline cursor-pointer font-bold"
@@ -481,6 +561,64 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               <span>Cấu Hình Sheets & Hotline</span>
             </button>
           </div>
+
+          {/* PROMINENT GOOGLE SHEET CONNECTION STATUS BANNER FOR ADMIN */}
+          {(!sheetUrl && !appsScriptEndpoint) ? (
+            <div className="bg-amber-500/10 border-2 border-amber-500/40 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 bg-amber-500/20 text-amber-400 rounded-xl shrink-0 mt-0.5 border border-amber-500/30">
+                  <AlertTriangle className="w-5 h-5 animate-pulse text-amber-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-black text-amber-300 uppercase tracking-wider">
+                      ⚠️ CẢNH BÁO: CHƯA KẾT NỐI GOOGLE SHEET
+                    </span>
+                    <span className="px-2.5 py-0.5 bg-rose-500/20 text-rose-400 font-extrabold text-[10px] rounded-full border border-rose-500/30 uppercase">
+                      Chưa Đồng Bộ Sheet
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    Hệ thống đang lưu trữ bài đăng &amp; yêu cầu tư vấn trên <strong>Cơ sở dữ liệu nội bộ</strong>.
+                    Để tự động sao lưu và hiển thị trực tiếp dữ liệu trên Google Sheets công khai, Quản trị viên vui lòng khai báo link Google Sheet bên dưới.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveTab('sheets')}
+                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md cursor-pointer flex items-center gap-2 whitespace-nowrap transition-all duration-200 shrink-0"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Cấu Hình Google Sheet Ngay</span>
+              </button>
+            </div>
+          ) : (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 p-3.5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-emerald-400 font-extrabold">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span>
+                  TRẠNG THÁI GOOGLE SHEET: <span className="font-bold text-white uppercase">Đã Kết Nối &amp; Đồng Bộ</span>
+                  <span className="text-slate-400 font-normal hidden md:inline ml-2">({sheetUrl ? sheetUrl.substring(0, 45) + '...' : appsScriptEndpoint.substring(0, 45) + '...'})</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={testSheetConnection}
+                  disabled={isTestingSheet}
+                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-xs rounded-lg border border-slate-700 cursor-pointer flex items-center gap-1.5 transition-all"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isTestingSheet ? 'animate-spin' : ''}`} />
+                  <span>{isTestingSheet ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('sheets')}
+                  className="text-slate-400 hover:text-white underline font-bold cursor-pointer"
+                >
+                  Chỉnh sửa
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* TAB 1: TRAFFIC & ANALYTICS DASHBOARD */}
           {activeTab === 'analytics' && (
@@ -1192,20 +1330,258 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           {/* TAB 5: GOOGLE SHEETS & SYSTEM CONFIG */}
           {activeTab === 'sheets' && (
             <div className="space-y-6">
-              {/* Google Sheets Config Card */}
-              <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-4">
-                <h2 className="text-lg font-black text-white flex items-center gap-2">
-                  <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
-                  <span>CẤU HÌNH ĐỒNG BỘ GOOGLE SHEETS TỰ ĐỘNG</span>
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Khi người dùng thêm phòng mới hoặc quản lý thay đổi dữ liệu, hệ thống có thể đẩy dữ liệu trực tiếp về Google Sheets.
-                </p>
+              {/* Contact Phone, Zalo, Email & Fanpage Configuration Card */}
+              <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-5">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                  <div>
+                    <h2 className="text-lg font-black text-white flex items-center gap-2">
+                      <Phone className="w-5 h-5 text-amber-400" />
+                      <span>CẤU HÌNH THÔNG TIN LIÊN HỆ & BẬT/TẮT KÊNH HỖ TRỢ</span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Bật/tắt từng kênh liên hệ (Hotline, Zalo, Email, Fanpage) và tùy chỉnh thông tin hiển thị trên toàn trang web.
+                    </p>
+                  </div>
+                </div>
 
-                <form onSubmit={handleSaveSheetConfig} className="space-y-4">
+                <form onSubmit={handleSaveContactSettings} className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    {/* 1. HOTLINE PHONE CHANNEL */}
+                    <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-4 h-4 text-emerald-400" />
+                          <span className="text-xs font-black text-white uppercase">1. Hotline Gọi Điện</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEnablePhone(!enablePhone)}
+                          className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                            enablePhone
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          <Power className="w-3.5 h-3.5" />
+                          <span>{enablePhone ? 'ĐANG BẬT' : 'ĐÃ TẮT'}</span>
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                          Số Điện Thoại Hotline Trực Tiếp
+                        </label>
+                        <input
+                          type="text"
+                          value={bookingPhone}
+                          onChange={(e) => setBookingPhone(e.target.value)}
+                          placeholder="VD: 0908 123 456"
+                          disabled={!enablePhone}
+                          className={`w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-amber-400 outline-none focus:ring-2 focus:ring-amber-500 ${
+                            !enablePhone && 'opacity-40 cursor-not-allowed'
+                          }`}
+                          required={enablePhone}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 2. ZALO CHANNEL */}
+                    <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <MessageCircle className="w-4 h-4 text-blue-400" />
+                          <span className="text-xs font-black text-white uppercase">2. Zalo Tư Vấn</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEnableZalo(!enableZalo)}
+                          className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                            enableZalo
+                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          <Power className="w-3.5 h-3.5" />
+                          <span>{enableZalo ? 'ĐANG BẬT' : 'ĐÃ TẮT'}</span>
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                          Số Điện Thoại Zalo Tư Vấn
+                        </label>
+                        <input
+                          type="text"
+                          value={zaloPhone}
+                          onChange={(e) => setZaloPhone(e.target.value)}
+                          placeholder="VD: 0908 123 456"
+                          disabled={!enableZalo}
+                          className={`w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-blue-400 outline-none focus:ring-2 focus:ring-blue-500 ${
+                            !enableZalo && 'opacity-40 cursor-not-allowed'
+                          }`}
+                          required={enableZalo}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 3. EMAIL CHANNEL */}
+                    <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-4 h-4 text-rose-400" />
+                          <span className="text-xs font-black text-white uppercase">3. Email Booking</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEnableEmail(!enableEmail)}
+                          className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                            enableEmail
+                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          <Power className="w-3.5 h-3.5" />
+                          <span>{enableEmail ? 'ĐANG BẬT' : 'ĐÃ TẮT'}</span>
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                          Email Hỗ Trợ Khách Hàng
+                        </label>
+                        <input
+                          type="email"
+                          value={bookingEmail}
+                          onChange={(e) => setBookingEmail(e.target.value)}
+                          placeholder="VD: booking@sansaigon.vn"
+                          disabled={!enableEmail}
+                          className={`w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-white outline-none focus:ring-2 focus:ring-rose-500 ${
+                            !enableEmail && 'opacity-40 cursor-not-allowed'
+                          }`}
+                          required={enableEmail}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 4. FANPAGE FACEBOOK CHANNEL */}
+                    <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Facebook className="w-4 h-4 text-indigo-400 fill-indigo-400/20" />
+                          <span className="text-xs font-black text-white uppercase">4. Fanpage Facebook</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEnableFanpage(!enableFanpage)}
+                          className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                            enableFanpage
+                              ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          <Power className="w-3.5 h-3.5" />
+                          <span>{enableFanpage ? 'ĐANG BẬT' : 'ĐÃ TẮT'}</span>
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
+                          Đường Dẫn Link Fanpage Facebook
+                        </label>
+                        <input
+                          type="url"
+                          value={fanpageUrl}
+                          onChange={(e) => setFanpageUrl(e.target.value)}
+                          placeholder="VD: https://facebook.com/sansaigon.vn"
+                          disabled={!enableFanpage}
+                          className={`w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-indigo-300 outline-none focus:ring-2 focus:ring-indigo-500 ${
+                            !enableFanpage && 'opacity-40 cursor-not-allowed'
+                          }`}
+                          required={enableFanpage}
+                        />
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSavingContact}
+                      className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer flex items-center gap-2 transition-all"
+                    >
+                      {isSavingContact ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Đang lưu cấu hình...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>LƯU CẤU HÌNH THÔNG TIN LIÊN HỆ & FANPAGE</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Google Sheets Config Card */}
+              <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                  <div>
+                    <h2 className="text-lg font-black text-white flex items-center gap-2">
+                      <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
+                      <span>CẤU HÌNH &amp; KIỂM TRA TRẠNG THÁI KẾT NỐI GOOGLE SHEETS</span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Kiểm tra thực tế trạng thái đồng bộ bài đăng &amp; đơn tư vấn giữa website Sàn Sài Gòn và Google Sheets.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={testSheetConnection}
+                    disabled={isTestingSheet}
+                    className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl cursor-pointer flex items-center gap-2 transition-all shrink-0"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isTestingSheet ? 'animate-spin' : ''}`} />
+                    <span>{isTestingSheet ? 'ĐANG KIỂM TRA...' : '⚡ KIỂM TRA KẾT NỐI NGAY'}</span>
+                  </button>
+                </div>
+
+                {/* Status Result Display Box */}
+                {sheetConnectionStatus && (
+                  <div className={`p-4 rounded-2xl border ${
+                    sheetConnectionStatus.isConnected
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                  }`}>
+                    <div className="flex items-center gap-2 font-black text-sm">
+                      {sheetConnectionStatus.isConnected ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                      ) : (
+                        <AlertTriangle className="w-5 h-5 text-rose-400 animate-bounce" />
+                      )}
+                      <span>{sheetConnectionStatus.message}</span>
+                    </div>
+                    {sheetConnectionStatus.details && (
+                      <p className="text-xs mt-2 text-slate-200 leading-relaxed font-mono bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                        {sheetConnectionStatus.details}
+                      </p>
+                    )}
+                    {sheetConnectionStatus.testedAt && (
+                      <div className="text-[10px] text-slate-400 mt-2 text-right">
+                        Thời gian kiểm tra: {sheetConnectionStatus.testedAt}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveSheetConfig} className="space-y-4 pt-2">
                   <div>
                     <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
-                      Link Google Sheet Xem Công Khai
+                      Link Google Sheet Xem Công Khai (URL Bảng Tính)
                     </label>
                     <input
                       type="url"
@@ -1229,7 +1605,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     />
                   </div>
 
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={testSheetConnection}
+                      disabled={isTestingSheet}
+                      className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold text-xs rounded-xl border border-slate-700 cursor-pointer flex items-center gap-2"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isTestingSheet ? 'animate-spin' : ''}`} />
+                      <span>Thử Kết Nối</span>
+                    </button>
                     <button
                       type="submit"
                       disabled={isSavingSheetConfig}
@@ -1243,7 +1628,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       ) : (
                         <>
                           <CheckCircle2 className="w-4 h-4" />
-                          <span>Lưu Cấu Hình Google Sheets</span>
+                          <span>Lưu Cấu Hình &amp; Báo Trạng Thái</span>
                         </>
                       )}
                     </button>
