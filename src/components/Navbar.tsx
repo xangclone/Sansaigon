@@ -103,16 +103,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Action Buttons (Admin button turned off on public navbar as requested) */}
-          <div className="hidden">
-            <button
-              onClick={onOpenAdminModal}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-950 hover:bg-slate-800 text-amber-400 font-extrabold text-xs rounded-xl border border-slate-800 shadow-xs transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
-              title="Truy cập Trang Quản Trị Sàn Sài Gòn"
-            >
-              <ShieldCheck className="w-4 h-4 text-amber-400" />
-              <span>Quản trị Admin</span>
-            </button>
+          {/* Action Buttons */}
+          <div className="flex items-center">
           </div>
 
         </div>

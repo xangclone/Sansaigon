@@ -28,8 +28,8 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
   const [district, setDistrict] = useState('Bình Thạnh');
   const [ward, setWard] = useState('Phường 25');
   const [address, setAddress] = useState('');
-  const [contactName, setContactName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [contactName, setContactName] = useState('Chủ nhà');
+  const [phone, setPhone] = useState('0908123456');
   const [description, setDescription] = useState('');
   const [electricityPrice, setElectricityPrice] = useState('3.800 đ/kWh');
   const [waterPrice, setWaterPrice] = useState('100.000 đ/người');
@@ -47,6 +47,7 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Handle local image file upload & convert to Base64
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,44 +85,55 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !phone.trim() || !address.trim() || !price) {
-      alert('Vui lòng điền đầy đủ các thông tin bắt buộc (Tiêu đề, Địa chỉ, Giá thuê, Số điện thoại).');
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!title.trim() || !address.trim() || !price) {
+      setErrorMessage('⚠️ Vui lòng điền đầy đủ các thông tin bắt buộc: Tiêu đề bài đăng, Địa chỉ và Giá thuê.');
       return;
     }
 
+    const finalPhone = phone.trim() || '0908123456';
+
     setIsSubmitting(true);
 
-    const success = await onAddRoom({
-      title,
-      type,
-      status,
-      price: Number(price),
-      deposit: Number(deposit || price),
-      depositSupport: depositSupport || undefined,
-      area: Number(area || 20),
-      availableRooms: Number(availableRooms || 1),
-      district,
-      ward,
-      address,
-      contactName: contactName || 'Chủ nhà',
-      phone,
-      zalo: phone,
-      description: description || 'Phòng thoáng mát sạch sẽ, an ninh tốt, giờ giấc tự do.',
-      electricityPrice,
-      waterPrice,
-      amenities: selectedAmenities,
-      images: images.length > 0 ? images : ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1000&q=80'],
-      isVerified: true
-    });
+    try {
+      const success = await onAddRoom({
+        title: title.trim(),
+        type,
+        status,
+        price: Number(price),
+        deposit: Number(deposit || price),
+        depositSupport: depositSupport || undefined,
+        area: Number(area || 20),
+        availableRooms: Number(availableRooms || 1),
+        district,
+        ward,
+        address: address.trim(),
+        contactName: contactName.trim() || 'Chủ nhà',
+        phone: finalPhone,
+        zalo: finalPhone,
+        description: description || 'Phòng thoáng mát sạch sẽ, an ninh tốt, giờ giấc tự do.',
+        electricityPrice,
+        waterPrice,
+        amenities: selectedAmenities,
+        images: images.length > 0 ? images : ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1000&q=80'],
+        isVerified: true
+      });
 
-    setIsSubmitting(false);
-
-    if (success) {
-      setSuccessMessage('🎉 Đã đăng tin phòng trọ mới thành công vào hệ thống!');
-      setTimeout(() => {
-        setSuccessMessage('');
-        onClose();
-      }, 1500);
+      if (success) {
+        setSuccessMessage('🎉 Đã đăng tin phòng trọ mới thành công vào hệ thống!');
+        setTimeout(() => {
+          setSuccessMessage('');
+          onClose();
+        }, 1500);
+      } else {
+        setErrorMessage('❌ Lỗi máy chủ không thể lưu bài đăng. Vui lòng kiểm tra lại kết nối mạng.');
+      }
+    } catch (err) {
+      setErrorMessage('❌ Đã xảy ra lỗi khi lưu bài đăng. Vui lòng thử lại.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -154,8 +166,14 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
           
           {successMessage && (
             <div className="p-4 bg-emerald-100 text-emerald-900 rounded-2xl font-bold text-sm border border-emerald-300 flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <span>{successMessage}</span>
+            </div>
+          )}
+
+          {errorMessage && (
+            <div className="p-4 bg-rose-50 text-rose-900 rounded-2xl font-bold text-sm border border-rose-300 flex items-center gap-2 animate-shake">
+              <span className="shrink-0">{errorMessage}</span>
             </div>
           )}
 
@@ -366,9 +384,9 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
 
             {/* Upload Buttons */}
             <div className="flex flex-col sm:flex-row items-center gap-2 mb-3">
-              <label className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-colors">
+              <label className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors">
                 <Upload className="w-4 h-4" />
-                <span>Chọn ảnh từ máy tính</span>
+                <span>TẢI ẢNH TỪ THIẾT BỊ (ĐIỆN THOẠI / MÁY TÍNH)</span>
                 <input
                   type="file"
                   accept="image/*"

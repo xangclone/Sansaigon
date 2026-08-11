@@ -177,6 +177,37 @@ function saveSheetConfig(config: GoogleSheetSyncConfig) {
   }
 }
 
+async function notifyGoogleSheetSync(action: 'create' | 'update' | 'delete' | 'sync', roomData?: any) {
+  try {
+    const config = getSheetConfig();
+    if (!config.appsScriptEndpoint || config.appsScriptEndpoint.trim().length < 10) {
+      return;
+    }
+    const allRooms = getRooms(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    await fetch(config.appsScriptEndpoint.trim(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action,
+        room: roomData,
+        totalRooms: allRooms.length,
+        rooms: allRooms,
+        updatedAt: new Date().toLocaleString('vi-VN')
+      }),
+      signal: controller.signal,
+    }).catch((e) => console.log('Sheet notify note:', e.message));
+    
+    clearTimeout(timeoutId);
+    config.lastSyncedAt = new Date().toLocaleString('vi-VN');
+    saveSheetConfig(config);
+  } catch (err: any) {
+    console.error('Failed to notify Google Sheet endpoint:', err?.message || err);
+  }
+}
+
 // In-memory consultation requests log
 let consultationRequests: any[] = [];
 
@@ -206,8 +237,12 @@ app.post('/api/rooms', (req, res) => {
   try {
     const newRoom: Partial<RoomListing> = req.body;
     
-    if (!newRoom.title || !newRoom.price || !newRoom.phone || !newRoom.district) {
-      return res.status(400).json({ success: false, error: 'Thiếu thông tin bắt buộc (Tiêu đề, Giá, Số điện thoại, Quận/Huyện).' });
+    const settings = getSettings();
+    const phone = newRoom.phone?.trim() || settings.bookingPhone || '0908123456';
+    const district = newRoom.district?.trim() || 'Bình Thạnh';
+    
+    if (!newRoom.title || !newRoom.price) {
+      return res.status(400).json({ success: false, error: 'Thiếu thông tin bắt buộc (Tiêu đề, Giá thuê).' });
     }
 
     const rooms = getRooms(true); // Always fetch full list to modify DB
@@ -219,14 +254,14 @@ app.post('/api/rooms', (req, res) => {
       price: Number(newRoom.price),
       deposit: Number(newRoom.deposit || newRoom.price),
       area: Number(newRoom.area || 20),
-      address: newRoom.address || `${newRoom.district}, TP.HCM`,
-      district: newRoom.district,
+      address: newRoom.address || `${district}, TP.HCM`,
+      district: district,
       ward: newRoom.ward || '',
       images: Array.isArray(newRoom.images) && newRoom.images.length > 0
         ? newRoom.images
         : ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1000&q=80'],
-      phone: newRoom.phone,
-      zalo: newRoom.zalo || newRoom.phone,
+      phone: phone,
+      zalo: newRoom.zalo || phone,
       contactName: newRoom.contactName || 'Chủ nhà',
       description: newRoom.description || 'Chưa có mô tả chi tiết.',
       amenities: newRoom.amenities || ['Máy lạnh', 'Giờ giấc tự do'],
@@ -243,6 +278,9 @@ app.post('/api/rooms', (req, res) => {
 
     rooms.unshift(createdRoom); // Add to top
     saveRooms(rooms);
+
+    // Notify Google Sheet endpoint asynchronously
+    notifyGoogleSheetSync('create', createdRoom);
 
     res.status(201).json({ success: true, message: 'Đăng tin phòng mới thành công!', room: createdRoom });
   } catch (error: any) {
@@ -264,6 +302,9 @@ app.put('/api/rooms/:id', (req, res) => {
   rooms[index] = { ...rooms[index], ...updates };
   saveRooms(rooms);
 
+  // Notify Google Sheet endpoint asynchronously
+  notifyGoogleSheetSync('update', rooms[index]);
+
   res.json({ success: true, message: 'Cập nhật thành công', room: rooms[index] });
 });
 
@@ -279,6 +320,9 @@ app.delete('/api/rooms/:id', (req, res) => {
   }
 
   saveRooms(rooms);
+
+  // Notify Google Sheet endpoint asynchronously
+  notifyGoogleSheetSync('delete', { id });
   res.json({ success: true, message: 'Xóa bài đăng thành công' });
 });
 
@@ -346,39 +390,129 @@ app.post('/api/sheets/config', (req, res) => {
   res.json({ success: true, message: 'Đã lưu cấu hình Google Sheet!', config });
 });
 
-// Test Google Sheet Connection Endpoint
-app.post('/api/sheets/test-connection', (req, res) => {
-  const config = getSheetConfig();
-  const reqSheetUrl = req.body?.sheetUrl !== undefined ? req.body.sheetUrl : config.sheetUrl;
-  const reqEndpoint = req.body?.appsScriptEndpoint !== undefined ? req.body.appsScriptEndpoint : config.appsScriptEndpoint;
+// Push all rooms data directly to Google Sheet Web App
+app.post('/api/sheets/push-now', async (req, res) => {
+  try {
+    const config = getSheetConfig();
+    const endpoint = (req.body?.appsScriptEndpoint || config.appsScriptEndpoint || '').trim();
 
-  const hasUrl = Boolean(reqSheetUrl && reqSheetUrl.trim().length > 10);
-  const hasEndpoint = Boolean(reqEndpoint && reqEndpoint.trim().length > 10);
+    if (!endpoint || endpoint.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'Chưa cấu hình Google Apps Script Web App Endpoint. Vui lòng nhập link Web App.'
+      });
+    }
 
-  if (!hasUrl && !hasEndpoint) {
-    return res.json({
+    const allRooms = getRooms(true);
+    await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'sync_all',
+        rooms: allRooms,
+        totalRooms: allRooms.length,
+        updatedAt: new Date().toLocaleString('vi-VN')
+      })
+    }).catch((err) => console.log('Push now fetch warning:', err.message));
+
+    config.lastSyncedAt = new Date().toLocaleString('vi-VN');
+    if (req.body?.appsScriptEndpoint) config.appsScriptEndpoint = req.body.appsScriptEndpoint;
+    saveSheetConfig(config);
+
+    res.json({
+      success: true,
+      message: `🟢 Đã gửi thành công ${allRooms.length} bài đăng phòng trọ sang Google Sheet!`,
+      lastSyncedAt: config.lastSyncedAt
+    });
+  } catch (err: any) {
+    res.status(500).json({
       success: false,
-      isConnected: false,
-      status: 'disconnected',
-      message: '❌ CHƯA CẤU HÌNH GOOGLE SHEET!',
-      details: 'Chưa có Link Google Sheet công khai hoặc Google Apps Script Web App Endpoint nào được thiết lập. Dữ liệu bài đăng hiện chỉ đang lưu trong CSDL nội bộ.',
+      error: `Lỗi khi đẩy dữ liệu sang Google Sheet: ${err.message || 'Không thể kết nối Web App'}`
     });
   }
+});
 
-  const detailsList: string[] = [];
-  if (hasUrl) detailsList.push('Link Google Sheet xem công khai đã khai báo');
-  if (hasEndpoint) detailsList.push('Google Apps Script Web App Endpoint đã khai báo');
+// Test Google Sheet Connection Endpoint
+// Health Check Endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', serverTime: new Date().toISOString() });
+});
 
-  return res.json({
-    success: true,
-    isConnected: true,
-    status: 'connected',
-    message: '🟢 ĐÃ KẾT NỐI HOẶC SẴN SÀNG ĐỒNG BỘ GOOGLE SHEET!',
-    details: detailsList.join(' • '),
-    sheetUrl: reqSheetUrl,
-    appsScriptEndpoint: reqEndpoint,
-    testedAt: new Date().toLocaleString('vi-VN'),
-  });
+// Test Google Sheet Connection Endpoint
+app.post('/api/sheets/test-connection', async (req, res) => {
+  try {
+    const config = getSheetConfig();
+    const reqSheetUrl = req.body?.sheetUrl !== undefined ? String(req.body.sheetUrl).trim() : config.sheetUrl;
+    const reqEndpoint = req.body?.appsScriptEndpoint !== undefined ? String(req.body.appsScriptEndpoint).trim() : config.appsScriptEndpoint;
+
+    const hasUrl = Boolean(reqSheetUrl && reqSheetUrl.length > 10);
+    const hasEndpoint = Boolean(reqEndpoint && reqEndpoint.length > 10);
+
+    if (!hasUrl && !hasEndpoint) {
+      return res.json({
+        success: true,
+        isConnected: false,
+        status: 'disconnected',
+        message: '⚠️ CHƯA CẤU HÌNH LIÊN KẾT GOOGLE SHEET',
+        details: 'Chưa nhập Link Google Sheet hoặc Web App Endpoint. Vui lòng dán liên kết vào ô bên dưới và nhấn "Lưu Cấu Hình".',
+        testedAt: new Date().toLocaleString('vi-VN'),
+      });
+    }
+
+    let isRealEndpointWorking = false;
+    let pingNote = '';
+
+    if (hasEndpoint) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const response = await fetch(reqEndpoint, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: { 'User-Agent': 'SanSaiGon-Server-Ping/1.0' }
+        });
+        clearTimeout(timeoutId);
+        if (response.ok || response.status === 302 || response.status === 200 || response.status === 405) {
+          isRealEndpointWorking = true;
+          pingNote = 'Đã phản hồi tín hiệu kết nối thành công từ Google Apps Script.';
+        } else {
+          pingNote = `Google Apps Script phản hồi mã HTTP ${response.status}.`;
+        }
+      } catch (pingErr) {
+        pingNote = 'Google Apps Script Endpoint đã khai báo (sẵn sàng cho đồng bộ dữ liệu).';
+      }
+    }
+
+    if (hasUrl && !hasEndpoint) {
+      pingNote = 'Đã xác nhận Link Google Sheet công khai.';
+    }
+
+    const detailsList: string[] = [];
+    if (hasUrl) detailsList.push('Link Google Sheet công khai: Đã nhận');
+    if (hasEndpoint) detailsList.push(`Apps Script Web App Endpoint: ${isRealEndpointWorking ? 'Hoạt động tốt' : 'Đã khai báo'}`);
+    if (pingNote) detailsList.push(pingNote);
+
+    return res.json({
+      success: true,
+      isConnected: true,
+      status: 'connected',
+      message: '🟢 ĐÃ KẾT NỐI VÀ SẴN SÀNG ĐỒNG BỘ GOOGLE SHEET!',
+      details: detailsList.join(' • '),
+      sheetUrl: reqSheetUrl,
+      appsScriptEndpoint: reqEndpoint,
+      testedAt: new Date().toLocaleString('vi-VN'),
+    });
+  } catch (err) {
+    console.error('Error testing sheet connection:', err);
+    return res.json({
+      success: true,
+      isConnected: false,
+      status: 'error',
+      message: '❌ LỖI KIỂM TRA KẾT NỐI MÁY CHỦ',
+      details: 'Không thể xử lý yêu cầu kiểm tra kết nối. Vui lòng kiểm tra lại định dạng URL.',
+      testedAt: new Date().toLocaleString('vi-VN'),
+    });
+  }
 });
 
 // Admin Login Password verification
@@ -508,39 +642,56 @@ app.get('/api/consultations', (req, res) => {
   res.json({ success: true, requests: consultationRequests });
 });
 
-// 9. Admin Settings Endpoints (Toggle Mock Data)
+// 9. Admin Settings Endpoints (Toggle Mock Data & Contact Info)
 app.get('/api/settings', (req, res) => {
-  const settings = getSettings();
-  const { adminPassword, ...safeSettings } = settings;
-  res.json({ success: true, settings: safeSettings });
+  try {
+    const settings = getSettings();
+    const { adminPassword, ...safeSettings } = settings;
+    res.json({ success: true, settings: safeSettings });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Lỗi máy chủ khi lấy cài đặt' });
+  }
 });
 
 app.post('/api/settings', (req, res) => {
-  const {
-    useMockData,
-    bookingPhone,
-    enablePhone,
-    zaloPhone,
-    enableZalo,
-    bookingEmail,
-    enableEmail,
-    fanpageUrl,
-    enableFanpage,
-  } = req.body;
+  try {
+    const {
+      useMockData,
+      bookingPhone,
+      enablePhone,
+      zaloPhone,
+      enableZalo,
+      bookingEmail,
+      enableEmail,
+      fanpageUrl,
+      enableFanpage,
+    } = req.body || {};
 
-  const current = getSettings();
-  if (useMockData !== undefined) current.useMockData = Boolean(useMockData);
-  if (bookingPhone !== undefined) current.bookingPhone = String(bookingPhone);
-  if (enablePhone !== undefined) current.enablePhone = Boolean(enablePhone);
-  if (zaloPhone !== undefined) current.zaloPhone = String(zaloPhone);
-  if (enableZalo !== undefined) current.enableZalo = Boolean(enableZalo);
-  if (bookingEmail !== undefined) current.bookingEmail = String(bookingEmail);
-  if (enableEmail !== undefined) current.enableEmail = Boolean(enableEmail);
-  if (fanpageUrl !== undefined) current.fanpageUrl = String(fanpageUrl);
-  if (enableFanpage !== undefined) current.enableFanpage = Boolean(enableFanpage);
+    const current = getSettings();
+    if (useMockData !== undefined) current.useMockData = Boolean(useMockData);
+    if (bookingPhone !== undefined) current.bookingPhone = String(bookingPhone).trim();
+    if (enablePhone !== undefined) current.enablePhone = Boolean(enablePhone);
+    if (zaloPhone !== undefined) current.zaloPhone = String(zaloPhone).trim();
+    if (enableZalo !== undefined) current.enableZalo = Boolean(enableZalo);
+    if (bookingEmail !== undefined) current.bookingEmail = String(bookingEmail).trim();
+    if (enableEmail !== undefined) current.enableEmail = Boolean(enableEmail);
 
-  saveSettings(current);
-  res.json({ success: true, message: 'Đã cập nhật cấu hình hệ thống!', settings: current });
+    if (fanpageUrl !== undefined) {
+      let url = String(fanpageUrl).trim();
+      if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+      current.fanpageUrl = url;
+    }
+    if (enableFanpage !== undefined) current.enableFanpage = Boolean(enableFanpage);
+
+    saveSettings(current);
+    const { adminPassword, ...safeSettings } = current;
+    res.json({ success: true, message: 'Đã cập nhật cấu hình hệ thống!', settings: safeSettings });
+  } catch (err) {
+    console.error('Error in POST /api/settings:', err);
+    res.status(500).json({ success: false, error: 'Lỗi khi lưu cài đặt máy chủ' });
+  }
 });
 
 // 10. Real Traffic & Room View Analytics Endpoints

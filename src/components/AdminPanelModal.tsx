@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   X, Lock, KeyRound, ShieldCheck, FileSpreadsheet, Plus, Trash2, Edit3,
-  CheckCircle2, RefreshCw, Phone, User, Building2, Eye, Download, Search, Sparkles, Layers, AlertTriangle
+  CheckCircle2, RefreshCw, Phone, User, Building2, Eye, Download, Search, Sparkles, Layers, AlertTriangle, Upload
 } from 'lucide-react';
 import { RoomListing, RoomStatus, ListingType } from '../types';
 import { SAIGON_DISTRICTS } from '../data/mockListings';
@@ -52,6 +52,48 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   // Status Notification
   const [toastMsg, setToastMsg] = useState('');
+
+  // Confirmation state for deleting a room
+  const [roomToDelete, setRoomToDelete] = useState<{ id: string; title: string } | null>(null);
+
+  // Admin Image Upload State & Handlers
+  const [adminImageUrlInput, setAdminImageUrlInput] = useState('');
+
+  const handleAdminFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !editingRoom) return;
+
+    Array.from(files).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          const newUrl = event.target.result as string;
+          setEditingRoom((prev) => prev ? ({
+            ...prev,
+            images: [...(prev.images || []), newUrl]
+          }) : null);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleAddAdminImageUrl = () => {
+    if (!adminImageUrlInput.trim() || !editingRoom) return;
+    setEditingRoom({
+      ...editingRoom,
+      images: [...(editingRoom.images || []), adminImageUrlInput.trim()]
+    });
+    setAdminImageUrlInput('');
+  };
+
+  const handleRemoveAdminImage = (index: number) => {
+    if (!editingRoom) return;
+    setEditingRoom({
+      ...editingRoom,
+      images: (editingRoom.images || []).filter((_, i) => i !== index)
+    });
+  };
 
   // Google Sheet Sync & Diagnostic State
   const [sheetUrl, setSheetUrl] = useState('');
@@ -106,15 +148,20 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingPhone, bookingEmail }),
+        body: JSON.stringify({
+          bookingPhone: bookingPhone.trim(),
+          bookingEmail: bookingEmail.trim(),
+        }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         showToast('✅ Đã lưu Hotline Booking & Email thành công!');
         fetchAnalyticsAndSettings();
+      } else {
+        showToast('❌ ' + (data?.error || 'Lỗi khi lưu thông tin liên hệ'));
       }
     } catch (err) {
-      alert('Lỗi khi lưu thông tin liên hệ');
+      showToast('❌ Lỗi kết nối khi lưu thông tin liên hệ');
     } finally {
       setIsSavingContact(false);
     }
@@ -139,7 +186,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         fetchAnalyticsAndSettings();
       }
     } catch (err) {
-      alert('Lỗi khi cập nhật cài đặt dữ liệu mẫu');
+      showToast('❌ Lỗi khi cập nhật cài đặt dữ liệu mẫu');
     }
   };
 
@@ -175,14 +222,17 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       });
       if (data.isConnected) {
         showToast('🟢 Kiểm tra kết nối Google Sheet thành công!');
+      } else {
+        showToast(data.message || '⚠️ Chưa cấu hình liên kết Google Sheet');
       }
     } catch (err) {
       setSheetConnectionStatus({
         isConnected: false,
-        message: '❌ Lỗi kết nối đến máy chủ kiểm tra Google Sheet',
-        details: 'Vui lòng thử lại sau',
+        message: '❌ Không thể kết nối đến máy chủ kiểm tra',
+        details: 'Vui lòng kiểm tra lại đường truyền mạng hoặc máy chủ backend',
         testedAt: new Date().toLocaleString('vi-VN'),
       });
+      showToast('❌ Lỗi kết nối đến máy chủ kiểm tra');
     } finally {
       setIsTestingSheet(false);
     }
@@ -281,7 +331,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         onRefreshRooms();
       }
     } catch (err) {
-      alert('Không thể cập nhật trạng thái');
+      showToast('❌ Không thể cập nhật trạng thái');
     }
   };
 
@@ -300,23 +350,31 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         onRefreshRooms();
       }
     } catch (err) {
-      alert('Không thể cập nhật số phòng trống');
+      showToast('❌ Không thể cập nhật số phòng trống');
     }
   };
 
   // Delete Room
-  const handleDeleteRoom = async (id: string, title: string) => {
-    if (!confirm(`Bạn có chắc chắn muốn XÓA bài đăng: "${title}"?`)) return;
+  const handleDeleteRoom = (id: string, title: string) => {
+    setRoomToDelete({ id, title });
+  };
+
+  const confirmDeleteRoom = async () => {
+    if (!roomToDelete) return;
+    const { id } = roomToDelete;
+    setRoomToDelete(null);
 
     try {
       const res = await fetch(`/api/rooms/${id}`, { method: 'DELETE' });
       const data = await res.json();
-      if (data.success) {
-        showToast('🗑️ Đã xóa bài đăng!');
+      if (data && data.success) {
+        showToast('🗑️ Đã xóa bài đăng thành công!');
         onRefreshRooms();
+      } else {
+        showToast('❌ ' + (data?.error || 'Lỗi khi xóa bài đăng'));
       }
     } catch (err) {
-      alert('Lỗi khi xóa bài đăng');
+      showToast('❌ Lỗi kết nối khi xóa bài đăng');
     }
   };
 
@@ -339,7 +397,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       ward: 'Phường 25',
       address: '',
       contactName: 'Chủ nhà',
-      phone: '',
+      phone: '0908123456',
       description: 'Phòng sạch đẹp, giờ giấc tự do, an ninh tốt.',
       amenities: ['Máy lạnh', 'Tủ lạnh', 'Giờ giấc tự do'],
       images: ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1000&q=80'],
@@ -350,10 +408,17 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   // Submit Edit/Create Form
   const handleSaveRoomForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingRoom || !editingRoom.title || !editingRoom.phone || !editingRoom.address) {
-      alert('Vui lòng nhập đầy đủ Tiêu đề, Số điện thoại và Địa chỉ phòng');
+    if (!editingRoom || !editingRoom.title?.trim() || !editingRoom.address?.trim()) {
+      showToast('⚠️ Vui lòng nhập đầy đủ Tiêu đề và Địa chỉ phòng');
       return;
     }
+
+    const roomPayload = {
+      ...editingRoom,
+      phone: editingRoom.phone?.trim() || '0908123456',
+      zalo: editingRoom.zalo?.trim() || editingRoom.phone?.trim() || '0908123456',
+      contactName: editingRoom.contactName?.trim() || 'Chủ nhà',
+    };
 
     try {
       if (editingRoom.id) {
@@ -361,34 +426,65 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         const res = await fetch(`/api/rooms/${editingRoom.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(editingRoom),
+          body: JSON.stringify(roomPayload),
         });
         const data = await res.json();
-        if (data.success) {
+        if (data && data.success) {
           showToast('🎉 Đã cập nhật thông tin phòng thành công!');
           onRefreshRooms();
           setActiveTab('listings');
+        } else {
+          showToast('❌ ' + (data?.error || 'Lỗi cập nhật phòng'));
         }
       } else {
         // Create new
         const res = await fetch('/api/rooms', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(editingRoom),
+          body: JSON.stringify(roomPayload),
         });
         const data = await res.json();
-        if (data.success) {
+        if (data && data.success) {
           showToast('🎉 Đã thêm bài đăng mới!');
           onRefreshRooms();
           setActiveTab('listings');
+        } else {
+          showToast('❌ ' + (data?.error || 'Lỗi tạo bài đăng mới'));
         }
       }
     } catch (err) {
-      alert('Lỗi lưu bài đăng');
+      showToast('❌ Đã xảy ra lỗi kết nối khi lưu bài đăng');
     }
   };
 
   // Save Sheet Config
+  const [isPushingSheet, setIsPushingSheet] = useState(false);
+
+  const handlePushSheetNow = async () => {
+    if (!appsScriptEndpoint?.trim()) {
+      showToast('⚠️ Vui lòng nhập Webhook Endpoint (Apps Script URL) trước');
+      return;
+    }
+    setIsPushingSheet(true);
+    try {
+      const res = await fetch('/api/sheets/push-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appsScriptEndpoint: appsScriptEndpoint.trim() }),
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        showToast(data.message || '🟢 Đã đẩy thành công dữ liệu sang Google Sheet!');
+      } else {
+        showToast('❌ ' + (data?.error || 'Không thể đẩy dữ liệu sang Google Sheet'));
+      }
+    } catch (err) {
+      showToast('❌ Lỗi kết nối khi đẩy dữ liệu sang Google Sheet');
+    } finally {
+      setIsPushingSheet(false);
+    }
+  };
+
   const handleSaveSheetConfig = async () => {
     setIsSavingSheetConfig(true);
     try {
@@ -398,12 +494,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         body: JSON.stringify({ sheetUrl, appsScriptEndpoint, autoSync: true }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         showToast('✅ Đã lưu cấu hình kết nối Google Sheet!');
         await testSheetConnection();
+      } else {
+        showToast('❌ ' + (data?.error || 'Không thể lưu cấu hình Sheet'));
       }
     } catch (err) {
-      alert('Không thể kết nối lưu cấu hình Sheet');
+      showToast('❌ Lỗi kết nối khi lưu cấu hình Sheet');
     } finally {
       setIsSavingSheetConfig(false);
     }
@@ -970,6 +1068,66 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
                 </div>
 
+                {/* Upload Image Section */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <label className="block text-xs font-bold text-slate-800 uppercase flex items-center justify-between">
+                    <span>🖼️ HÌNH ẢNH PHÒNG TRỌ ({(editingRoom.images || []).length} ảnh)</span>
+                    <span className="text-[11px] text-slate-500 font-normal">Tải từ điện thoại/máy tính hoặc dán link URL</span>
+                  </label>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <label className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-all">
+                      <Upload className="w-4 h-4" />
+                      <span>TẢI ẢNH TỪ THIẾT BỊ (ĐIỆN THOẠI / MÁY TÍNH)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleAdminFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    <span className="text-xs text-slate-400 font-semibold hidden sm:inline">hoặc</span>
+
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto flex-1">
+                      <input
+                        type="url"
+                        value={adminImageUrlInput}
+                        onChange={(e) => setAdminImageUrlInput(e.target.value)}
+                        placeholder="Dán URL link hình ảnh..."
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddAdminImageUrl}
+                        className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shrink-0 cursor-pointer"
+                      >
+                        Thêm Link
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Image Thumbnails Preview */}
+                  {(editingRoom.images || []).length > 0 && (
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-2 border-t border-slate-200">
+                      {(editingRoom.images || []).map((img, idx) => (
+                        <div key={idx} className="relative aspect-square rounded-xl overflow-hidden group border border-slate-200 bg-slate-200">
+                          <img src={img} alt="Preview" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAdminImage(idx)}
+                            className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-full opacity-80 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Xóa ảnh này"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* Amenity Selector (Preset Suggestions + Custom Hand Typing) */}
                 <AmenitySelector
                   selectedAmenities={editingRoom.amenities || []}
@@ -1078,7 +1236,16 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     />
                   </div>
 
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={handlePushSheetNow}
+                      disabled={isPushingSheet}
+                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isPushingSheet ? 'animate-spin' : ''}`} />
+                      <span>{isPushingSheet ? 'Đang Đẩy...' : '🚀 Đẩy Dữ Liệu Sang Sheet Ngay'}</span>
+                    </button>
                     <button
                       type="button"
                       onClick={testSheetConnection}
@@ -1090,10 +1257,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     <button
                       onClick={handleSaveSheetConfig}
                       disabled={isSavingSheetConfig}
-                      className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center gap-2 cursor-pointer"
+                      className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <RefreshCw className="w-4 h-4" />
-                      <span>Lưu Cấu Hình &amp; Kiểm Tra</span>
+                      <span>Lưu Cấu Hình</span>
                     </button>
                   </div>
                 </div>
@@ -1405,6 +1572,38 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         )}
 
       </div>
+
+      {/* Delete Confirmation Modal Popup */}
+      {roomToDelete && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-rose-100 rounded-2xl flex items-center justify-center text-rose-600 mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-black text-slate-900 mb-2">Xác nhận xóa bài đăng</h3>
+            <p className="text-sm text-slate-600 mb-6 font-medium leading-relaxed">
+              Bạn có chắc chắn muốn xóa bài đăng: <strong className="text-slate-900 font-bold">{roomToDelete.title}</strong>? Thao tác này sẽ xóa vĩnh viễn bài đăng khỏi hệ thống.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setRoomToDelete(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteRoom}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors cursor-pointer flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Xác Nhận Xóa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

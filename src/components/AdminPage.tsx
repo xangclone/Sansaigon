@@ -3,7 +3,7 @@ import {
   ShieldCheck, FileSpreadsheet, Plus, Trash2, Edit3,
   CheckCircle2, RefreshCw, Phone, User, Building2, Eye, Search, Sparkles, Layers,
   BarChart3, TrendingUp, Smartphone, Monitor, ArrowLeft, Home, Lock, KeyRound, Clock, MessageSquare, Gift, Settings,
-  Facebook, MessageCircle, Mail, Globe, Power, AlertTriangle, Copy
+  Facebook, MessageCircle, Mail, Globe, Power, AlertTriangle, Copy, Upload
 } from 'lucide-react';
 import { RoomListing, RoomStatus, ListingType } from '../types';
 import { SAIGON_DISTRICTS } from '../data/mockListings';
@@ -33,8 +33,50 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   // Search in Admin Panel
   const [adminSearch, setAdminSearch] = useState('');
 
+  // Confirmation state for deleting a room
+  const [roomToDelete, setRoomToDelete] = useState<{ id: string; title: string } | null>(null);
+
   // Currently Editing Room (null if creating new)
   const [editingRoom, setEditingRoom] = useState<Partial<RoomListing> | null>(null);
+
+  // Admin Image Upload State & Handlers
+  const [adminImageUrlInput, setAdminImageUrlInput] = useState('');
+
+  const handleAdminFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !editingRoom) return;
+
+    Array.from(files).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          const newUrl = event.target.result as string;
+          setEditingRoom((prev) => prev ? ({
+            ...prev,
+            images: [...(prev.images || []), newUrl]
+          }) : null);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleAddAdminImageUrl = () => {
+    if (!adminImageUrlInput.trim() || !editingRoom) return;
+    setEditingRoom({
+      ...editingRoom,
+      images: [...(editingRoom.images || []), adminImageUrlInput.trim()]
+    });
+    setAdminImageUrlInput('');
+  };
+
+  const handleRemoveAdminImage = (index: number) => {
+    if (!editingRoom) return;
+    setEditingRoom({
+      ...editingRoom,
+      images: (editingRoom.images || []).filter((_, i) => i !== index)
+    });
+  };
 
   // Consultations List
   const [consultations, setConsultations] = useState<any[]>([]);
@@ -124,28 +166,37 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const handleSaveContactSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingContact(true);
+
+    let cleanFanpage = fanpageUrl.trim();
+    if (cleanFanpage && !cleanFanpage.startsWith('http://') && !cleanFanpage.startsWith('https://')) {
+      cleanFanpage = 'https://' + cleanFanpage;
+      setFanpageUrl(cleanFanpage);
+    }
+
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          bookingPhone,
+          bookingPhone: bookingPhone.trim(),
           enablePhone,
-          zaloPhone,
+          zaloPhone: zaloPhone.trim(),
           enableZalo,
-          bookingEmail,
+          bookingEmail: bookingEmail.trim(),
           enableEmail,
-          fanpageUrl,
+          fanpageUrl: cleanFanpage,
           enableFanpage,
         }),
       });
       const data = await res.json();
-      if (data.success) {
-        showToast('✅ Đã lưu cấu hình liên hệ & fanpage thành công!');
+      if (data && data.success) {
+        showToast('✅ Đã lưu thông tin liên hệ & kênh hỗ trợ thành công!');
         fetchAnalyticsAndSettings();
+      } else {
+        showToast('❌ ' + (data?.error || 'Lỗi khi lưu thông tin liên hệ'));
       }
     } catch (err) {
-      alert('Lỗi khi lưu thông tin liên hệ');
+      showToast('❌ Lỗi kết nối khi lưu thông tin liên hệ');
     } finally {
       setIsSavingContact(false);
     }
@@ -170,7 +221,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         fetchAnalyticsAndSettings();
       }
     } catch (err) {
-      alert('Lỗi khi cập nhật cài đặt dữ liệu mẫu');
+      showToast('❌ Lỗi khi cập nhật cài đặt dữ liệu mẫu');
     }
   };
 
@@ -206,14 +257,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       });
       if (data.isConnected) {
         showToast('🟢 Kiểm tra kết nối Google Sheet thành công!');
+      } else {
+        showToast(data.message || '⚠️ Chưa cấu hình liên kết Google Sheet');
       }
     } catch (err) {
       setSheetConnectionStatus({
         isConnected: false,
-        message: '❌ Lỗi kết nối đến máy chủ kiểm tra Google Sheet',
-        details: 'Vui lòng thử lại sau',
+        message: '❌ Không thể kết nối đến máy chủ kiểm tra',
+        details: 'Vui lòng kiểm tra lại đường truyền mạng hoặc máy chủ backend',
         testedAt: new Date().toLocaleString('vi-VN'),
       });
+      showToast('❌ Lỗi kết nối đến máy chủ kiểm tra');
     } finally {
       setIsTestingSheet(false);
     }
@@ -350,30 +404,46 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         onRefreshRooms();
       }
     } catch (err) {
-      alert('Lỗi khi cập nhật trạng thái phòng');
+      showToast('❌ Lỗi khi cập nhật trạng thái phòng');
     }
   };
 
-  const handleDeleteRoom = async (roomId: string) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xoá phòng mã #${roomId} khỏi hệ thống?`)) return;
+  const handleDeleteRoom = (roomId: string, title?: string) => {
+    setRoomToDelete({ id: roomId, title: title || `#${roomId}` });
+  };
+
+  const confirmDeleteRoom = async () => {
+    if (!roomToDelete) return;
+    const { id } = roomToDelete;
+    setRoomToDelete(null);
+
     try {
-      const res = await fetch(`/api/rooms/${roomId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/rooms/${id}`, { method: 'DELETE' });
       const data = await res.json();
-      if (data.success) {
-        showToast(`✅ Đã xoá phòng #${roomId} thành công`);
+      if (data && data.success) {
+        showToast('🗑️ Đã xoá bài đăng thành công!');
         onRefreshRooms();
+      } else {
+        showToast('❌ ' + (data?.error || 'Lỗi khi xoá bài đăng'));
       }
     } catch (err) {
-      alert('Lỗi khi xoá bài đăng');
+      showToast('❌ Lỗi kết nối khi xoá bài đăng');
     }
   };
 
   const handleSaveRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingRoom?.title || !editingRoom?.price || !editingRoom?.address) {
-      alert('Vui lòng điền đầy đủ tiêu đề, địa chỉ và giá thuê!');
+    if (!editingRoom?.title?.trim() || !editingRoom?.price || !editingRoom?.address?.trim()) {
+      showToast('⚠️ Vui lòng điền đầy đủ tiêu đề, địa chỉ và giá thuê!');
       return;
     }
+
+    const roomPayload = {
+      ...editingRoom,
+      phone: editingRoom.phone?.trim() || '0908123456',
+      zalo: editingRoom.zalo?.trim() || editingRoom.phone?.trim() || '0908123456',
+      contactName: editingRoom.contactName?.trim() || 'Chủ nhà',
+    };
 
     try {
       const method = editingRoom.id ? 'PUT' : 'POST';
@@ -382,18 +452,47 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingRoom),
+        body: JSON.stringify(roomPayload),
       });
 
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         showToast(editingRoom.id ? '✅ Cập nhật phòng thành công!' : '✨ Thêm phòng mới thành công!');
         setEditingRoom(null);
         setActiveTab('listings');
         onRefreshRooms();
+      } else {
+        showToast('❌ ' + (data?.error || 'Lỗi khi lưu phòng'));
       }
     } catch (err) {
-      alert('Có lỗi xảy ra khi lưu phòng');
+      showToast('❌ Có lỗi xảy ra khi lưu phòng');
+    }
+  };
+
+  const [isPushingSheet, setIsPushingSheet] = useState(false);
+
+  const handlePushSheetNow = async () => {
+    if (!appsScriptEndpoint?.trim()) {
+      showToast('⚠️ Vui lòng nhập Webhook Endpoint (Apps Script URL) trước');
+      return;
+    }
+    setIsPushingSheet(true);
+    try {
+      const res = await fetch('/api/sheets/push-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appsScriptEndpoint: appsScriptEndpoint.trim() }),
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        showToast(data.message || '🟢 Đã đẩy thành công dữ liệu sang Google Sheet!');
+      } else {
+        showToast('❌ ' + (data?.error || 'Không thể đẩy dữ liệu sang Google Sheet'));
+      }
+    } catch (err) {
+      showToast('❌ Lỗi kết nối khi đẩy dữ liệu sang Google Sheet');
+    } finally {
+      setIsPushingSheet(false);
     }
   };
 
@@ -407,12 +506,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         body: JSON.stringify({ sheetUrl, appsScriptEndpoint }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         showToast('✅ Đã lưu cấu hình Google Sheet!');
         await testSheetConnection();
+      } else {
+        showToast('❌ ' + (data?.error || 'Lỗi khi lưu cấu hình Google Sheet'));
       }
     } catch (err) {
-      alert('Lỗi khi lưu cấu hình Google Sheet');
+      showToast('❌ Lỗi khi lưu cấu hình Google Sheet');
     } finally {
       setIsSavingSheetConfig(false);
     }
@@ -1120,7 +1221,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={() => handleDeleteRoom(room.id)}
+                              onClick={() => handleDeleteRoom(room.id, room.title)}
                               className="p-2 bg-slate-800 hover:bg-rose-950 text-rose-400 rounded-lg transition-colors cursor-pointer"
                               title="Xoá bài đăng"
                             >
@@ -1302,21 +1403,82 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   />
                 </div>
 
-                {/* Images Array Input */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 uppercase mb-1">Link Hình Ảnh (Mỗi dòng 1 URL)</label>
-                  <textarea
-                    rows={3}
-                    value={(editingRoom?.images || []).join('\n')}
-                    onChange={(e) =>
-                      setEditingRoom({
-                        ...editingRoom,
-                        images: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
-                      })
-                    }
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-xs font-mono text-amber-300 outline-none focus:ring-2 focus:ring-rose-500"
-                  />
+                {/* Upload Image Section */}
+                <div className="p-4 bg-slate-900 rounded-2xl border border-slate-800 space-y-3">
+                  <label className="block text-xs font-bold text-slate-300 uppercase flex items-center justify-between">
+                    <span>🖼️ HÌNH ẢNH PHÒNG TRỌ ({(editingRoom?.images || []).length} ảnh)</span>
+                    <span className="text-[11px] text-slate-400 font-normal">Tải từ điện thoại/máy tính hoặc dán link URL</span>
+                  </label>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <label className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all">
+                      <Upload className="w-4 h-4" />
+                      <span>TẢI ẢNH TỪ THIẾT BỊ (ĐIỆN THOẠI / MÁY TÍNH)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleAdminFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    <span className="text-xs text-slate-500 font-semibold hidden sm:inline">hoặc</span>
+
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto flex-1">
+                      <input
+                        type="url"
+                        value={adminImageUrlInput}
+                        onChange={(e) => setAdminImageUrlInput(e.target.value)}
+                        placeholder="Dán URL link hình ảnh..."
+                        className="w-full p-2.5 bg-slate-950 border border-slate-700 text-white rounded-xl text-xs outline-none focus:ring-2 focus:ring-rose-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddAdminImageUrl}
+                        className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl shrink-0 cursor-pointer"
+                      >
+                        Thêm Link
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Image Thumbnails Preview */}
+                  {(editingRoom?.images || []).length > 0 && (
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-2 border-t border-slate-800">
+                      {(editingRoom?.images || []).map((img, idx) => (
+                        <div key={idx} className="relative aspect-square rounded-xl overflow-hidden group border border-slate-800 bg-slate-950">
+                          <img src={img} alt="Preview" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAdminImage(idx)}
+                            className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-full opacity-80 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Xóa ảnh này"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-slate-800/60">
+                    <label className="block text-[11px] text-slate-400 font-semibold mb-1">
+                      Hoặc chỉnh sửa danh sách URL hàng loạt (Mỗi dòng 1 URL)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={(editingRoom?.images || []).join('\n')}
+                      onChange={(e) =>
+                        setEditingRoom({
+                          ...editingRoom,
+                          images: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
+                        })
+                      }
+                      placeholder="https://images.unsplash.com/..."
+                      className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-amber-300 outline-none"
+                    />
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-800 flex justify-end gap-3">
@@ -1699,10 +1861,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           Đường Dẫn Link Fanpage Facebook
                         </label>
                         <input
-                          type="url"
+                          type="text"
                           value={fanpageUrl}
                           onChange={(e) => setFanpageUrl(e.target.value)}
-                          placeholder="VD: https://facebook.com/sansaigon.vn"
+                          placeholder="VD: facebook.com/sansaigon.vn"
                           disabled={!enableFanpage}
                           className={`w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-indigo-300 outline-none focus:ring-2 focus:ring-indigo-500 ${
                             !enableFanpage && 'opacity-40 cursor-not-allowed'
@@ -1814,7 +1976,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     />
                   </div>
 
-                  <div className="flex justify-end gap-3">
+                  <div className="flex flex-wrap justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={handlePushSheetNow}
+                      disabled={isPushingSheet}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-md cursor-pointer flex items-center gap-2"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isPushingSheet ? 'animate-spin' : ''}`} />
+                      <span>{isPushingSheet ? 'Đang Đẩy...' : '🚀 Đẩy Dữ Liệu Sang Sheet Ngay'}</span>
+                    </button>
                     <button
                       type="button"
                       onClick={testSheetConnection}
@@ -1970,6 +2141,38 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       <footer className="mt-auto bg-slate-950 border-t border-slate-800 py-4 px-6 text-center text-xs text-slate-500">
         <span>© 2026 Trang Quản Trị Hệ Thống San Sài Gòn — Quản lý phòng trọ, KTX, Pass phòng & Thống kê lưu lượng truy cập</span>
       </footer>
+
+      {/* Delete Confirmation Modal Popup */}
+      {roomToDelete && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-center text-rose-400 mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-black text-white mb-2">Xác nhận xóa bài đăng</h3>
+            <p className="text-sm text-slate-300 mb-6 font-medium leading-relaxed">
+              Bạn có chắc chắn muốn xóa bài đăng: <strong className="text-amber-400 font-bold">{roomToDelete.title}</strong>? Thao tác này sẽ xóa vĩnh viễn bài đăng khỏi hệ thống.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setRoomToDelete(null)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteRoom}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors cursor-pointer flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Xác Nhận Xóa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

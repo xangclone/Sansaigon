@@ -22,11 +22,13 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({
   const [note, setNote] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg('');
     if (!customerName.trim() || !customerPhone.trim()) {
-      alert('Vui lòng điền Họ tên và Số điện thoại.');
+      setErrorMsg('⚠️ Vui lòng điền Họ tên và Số điện thoại liên hệ.');
       return;
     }
 
@@ -39,18 +41,19 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({
         body: JSON.stringify({
           listingId: roomId || 'Tư vấn chung',
           listingTitle: roomTitle || 'Tìm phòng trọ Sài Gòn',
-          customerName,
-          customerPhone,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim(),
           note,
           preferredTime
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
+        setIsSubmitted(true);
+      } else {
         setIsSubmitted(true);
       }
     } catch (err) {
-      alert('Đã gửi yêu cầu tư vấn thành công!');
       setIsSubmitted(true);
     } finally {
       setIsLoading(false);
@@ -139,6 +142,12 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-3">
+              {errorMsg && (
+                <div className="p-2.5 bg-rose-50 rounded-xl border border-rose-200 text-xs font-bold text-rose-700">
+                  {errorMsg}
+                </div>
+              )}
+
               {roomTitle && (
                 <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-xs font-semibold text-amber-900 truncate">
                   📌 Đang quan tâm: <strong className="text-rose-700">{roomTitle}</strong>

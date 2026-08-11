@@ -153,9 +153,11 @@ export const Footer: React.FC<FooterProps> = ({
           <span>
             © 2026 San Sài gòn — Hệ thống đăng tin phòng trọ, KTX, phòng pass Sài Gòn.
           </span>
-          <div className="flex items-center gap-1 text-slate-400 font-semibold">
-            <ShieldCheck className="w-4 h-4 text-emerald-500" />
-            <span>Địa chỉ & Giá cả đã xác minh chính chủ</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 text-slate-400 font-semibold">
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span>Địa chỉ & Giá cả đã xác minh chính chủ</span>
+            </div>
           </div>
         </div>
 

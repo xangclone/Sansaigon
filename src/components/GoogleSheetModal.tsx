@@ -36,7 +36,13 @@ export const GoogleSheetModal: React.FC<GoogleSheetModalProps> = ({
       .catch((err) => console.error('Error fetching sheet config:', err));
   }, []);
 
+  const [saveError, setSaveError] = useState('');
+  const [isPushing, setIsPushing] = useState(false);
+  const [pushSuccess, setPushSuccess] = useState('');
+
   const handleSaveConfig = async () => {
+    setSaveError('');
+    setPushSuccess('');
     try {
       const res = await fetch('/api/sheets/config', {
         method: 'POST',
@@ -44,13 +50,44 @@ export const GoogleSheetModal: React.FC<GoogleSheetModalProps> = ({
         body: JSON.stringify({ sheetUrl, appsScriptEndpoint, autoSync }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         setLastSynced(data.config.lastSyncedAt);
         setIsSaved(true);
         setTimeout(() => setIsSaved(false), 2500);
+      } else {
+        setSaveError(data?.error || 'Không thể lưu cấu hình Sheet');
       }
     } catch (err) {
-      alert('Không thể kết nối lưu cấu hình');
+      setSaveError('Không thể kết nối máy chủ để lưu cấu hình');
+    }
+  };
+
+  const handlePushNow = async () => {
+    if (!appsScriptEndpoint?.trim()) {
+      setSaveError('Vui lòng nhập link Apps Script Web App Endpoint trước khi bấm Đẩy dữ liệu.');
+      return;
+    }
+    setIsPushing(true);
+    setSaveError('');
+    setPushSuccess('');
+    try {
+      const res = await fetch('/api/sheets/push-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appsScriptEndpoint: appsScriptEndpoint.trim() }),
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        setLastSynced(data.lastSyncedAt);
+        setPushSuccess(data.message || '🎉 Đã gửi thành công dữ liệu sang Google Sheet!');
+        setTimeout(() => setPushSuccess(''), 4000);
+      } else {
+        setSaveError(data?.error || 'Không thể đẩy dữ liệu sang Google Sheet');
+      }
+    } catch (err) {
+      setSaveError('Lỗi kết nối máy chủ khi đẩy dữ liệu sang Sheet');
+    } finally {
+      setIsPushing(false);
     }
   };
 
@@ -59,55 +96,76 @@ export const GoogleSheetModal: React.FC<GoogleSheetModalProps> = ({
   };
 
   const appsScriptCodeSnippet = `
+// === CODE GOOGLE APPS SCRIPT KẾT NỐI TỰ ĐỘNG SÀN SÀI GÒN ===
+// Hướng dẫn:
+// 1. Mở Google Sheet -> Tiện ích mở rộng (Extensions) -> Apps Script
+// 2. Xóa hết code cũ, dán toàn bộ đoạn code này vào -> Nhấn Lưu (Ctrl + S)
+// 3. Nhấn Triển khai (Deploy) -> Triển khai dưới dạng ứng dụng web (New Deployment -> Web App)
+// 4. Mục "Người có quyền truy cập" chọn "BẤT KỲ AI" (Anyone) -> Nhấn Triển khai
+// 5. Sao chép link Web App dán vào ô "Apps Script Webhook Endpoint" trên Sàn Sài Gòn.
+
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    
+    if (data.rooms && Array.isArray(data.rooms)) {
+      updateAllSheetData(sheet, data.rooms);
+    } else if (data.room) {
+      appendSingleRoom(sheet, data.room);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ result: "success" })).setMimeType(ContentService.MimeType.JSON);
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({ result: "error", message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
 function IMPORT_SAN_SAIGON_ROOMS() {
-  var url = "${window.location.origin}/api/rooms";
-  var response = UrlFetchApp.fetch(url);
+  var apiUrl = "${window.location.origin}/api/rooms";
+  var response = UrlFetchApp.fetch(apiUrl);
   var json = JSON.parse(response.getContentText());
-  
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  updateAllSheetData(sheet, json.rooms || []);
+}
+
+function updateAllSheetData(sheet, rooms) {
   sheet.clear();
-  
-  // Headers - Cấu trúc các cột chuẩn của Sàn Sài Gòn
   sheet.appendRow([
-    "Mã Phòng (ID)", 
-    "Tiêu Đề Bài Đăng", 
-    "Loại Bài Đăng", 
-    "Trạng Thái", 
-    "Giá Thuê (VND/Tháng)", 
-    "Tiền Cọc (VND)", 
-    "Hỗ Trợ Cọc (Pass Phòng)", 
-    "Diện Tích (m2)", 
-    "Quận/Huyện", 
-    "Địa Chỉ Chi Tiết", 
-    "Tiện Ích (Phẩy)", 
-    "Link Hình Ảnh URL (Phân cách dấu phẩy)", 
-    "SĐT Chủ Nhà", 
-    "Tên Chủ Nhà", 
-    "Ngày Đăng"
+    "Mã Phòng (ID)", "Tiêu Đề Bài Đăng", "Loại Bài Đăng", "Trạng Thái",
+    "Giá Thuê (VND)", "Tiền Cọc (VND)", "Hỗ Trợ Cọc", "Diện Tích (m2)",
+    "Quận/Huyện", "Địa Chỉ Chi Tiết", "Tiện Ích", "Hình Ảnh URL",
+    "SĐT Liên Hệ", "Tên Chủ Nhà", "Ngày Đăng"
   ]);
   
-  // Data Rows
-  json.rooms.forEach(function(r) {
-    var imagesList = (r.images || []).join(", ");
-    var amenitiesList = (r.amenities || []).join(", ");
+  rooms.forEach(function(r) {
     sheet.appendRow([
-      r.id, 
-      r.title, 
-      r.type, 
-      r.status, 
-      r.price, 
-      r.deposit, 
-      r.depositSupport || "", 
-      r.area, 
-      r.district, 
-      r.address, 
-      amenitiesList, 
-      imagesList, 
-      r.ownerPhone || r.phone || "", 
-      r.ownerName || r.contactName || "", 
-      r.createdAt
+      r.id, r.title, r.type, r.status,
+      r.price, r.deposit, r.depositSupport || "", r.area,
+      r.district, r.address,
+      (r.amenities || []).join(", "),
+      (r.images || []).join(", "),
+      r.phone || "", r.contactName || "", r.createdAt
     ]);
   });
+}
+
+function appendSingleRoom(sheet, r) {
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow([
+      "Mã Phòng (ID)", "Tiêu Đề Bài Đăng", "Loại Bài Đăng", "Trạng Thái",
+      "Giá Thuê (VND)", "Tiền Cọc (VND)", "Hỗ Trợ Cọc", "Diện Tích (m2)",
+      "Quận/Huyện", "Địa Chỉ Chi Tiết", "Tiện Ích", "Hình Ảnh URL",
+      "SĐT Liên Hệ", "Tên Chủ Nhà", "Ngày Đăng"
+    ]);
+  }
+  sheet.appendRow([
+    r.id, r.title, r.type, r.status,
+    r.price, r.deposit, r.depositSupport || "", r.area,
+    r.district, r.address,
+    (r.amenities || []).join(", "),
+    (r.images || []).join(", "),
+    r.phone || "", r.contactName || "", r.createdAt
+  ]);
 }
   `.trim();
 
@@ -299,18 +357,42 @@ function IMPORT_SAN_SAIGON_ROOMS() {
               />
             </div>
 
-            <div className="flex items-center justify-between pt-2">
+            {saveError && (
+              <div className="p-3 bg-rose-50 text-rose-700 rounded-xl text-xs font-bold border border-rose-200">
+                ❌ {saveError}
+              </div>
+            )}
+
+            {pushSuccess && (
+              <div className="p-3 bg-emerald-50 text-emerald-900 rounded-xl text-xs font-bold border border-emerald-300 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{pushSuccess}</span>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
               <div className="text-xs text-slate-500 font-medium">
                 {lastSynced ? `Lần đồng bộ gần nhất: ${lastSynced}` : 'Chưa đồng bộ'}
               </div>
 
-              <button
-                onClick={handleSaveConfig}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors"
-              >
-                {isSaved ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <RefreshCw className="w-4 h-4" />}
-                <span>{isSaved ? 'Đã Lưu Cấu Hình' : 'Lưu Cấu Hình Sync'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePushNow}
+                  disabled={isPushing}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isPushing ? 'animate-spin' : ''}`} />
+                  <span>{isPushing ? 'Đang Đẩy...' : '🚀 ĐẨY DỮ LIỆU SANG SHEET NGAY'}</span>
+                </button>
+
+                <button
+                  onClick={handleSaveConfig}
+                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  {isSaved ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <RefreshCw className="w-4 h-4" />}
+                  <span>{isSaved ? 'Đã Lưu' : 'Lưu Cấu Hình'}</span>
+                </button>
+              </div>
             </div>
           </div>
 
