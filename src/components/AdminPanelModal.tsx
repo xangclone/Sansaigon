@@ -232,10 +232,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         setIsAuthenticated(true);
         showToast('🎉 Đăng nhập Admin thành công!');
       } else {
-        setLoginError(data.error || 'Mật khẩu không chính xác!');
+        setLoginError(data.error || 'Mật khẩu quản trị không chính xác!');
       }
     } catch (err) {
-      setLoginError('Lỗi kết nối máy chủ');
+      setLoginError('Lỗi kết nối máy chủ xác thực.');
     }
   };
 

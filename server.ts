@@ -29,6 +29,8 @@ interface AppSettings {
   enableEmail: boolean;
   fanpageUrl: string;
   enableFanpage: boolean;
+  adminSecretPath: string;
+  adminPassword: string;
 }
 
 function getSettings(): AppSettings {
@@ -45,6 +47,8 @@ function getSettings(): AppSettings {
         enableEmail: data.enableEmail ?? true,
         fanpageUrl: data.fanpageUrl || 'https://facebook.com/sansaigon.vn',
         enableFanpage: data.enableFanpage ?? true,
+        adminSecretPath: data.adminSecretPath || 'quan-tri-bao-mat-2026',
+        adminPassword: data.adminPassword || 'Sansaigon1766!!1',
       };
     }
   } catch (err) {
@@ -60,6 +64,8 @@ function getSettings(): AppSettings {
     enableEmail: true,
     fanpageUrl: 'https://facebook.com/sansaigon.vn',
     enableFanpage: true,
+    adminSecretPath: 'quan-tri-bao-mat-2026',
+    adminPassword: 'Sansaigon1766!!1',
   };
 }
 
@@ -375,13 +381,43 @@ app.post('/api/sheets/test-connection', (req, res) => {
   });
 });
 
-// Admin Login Password verification
+// Strict Admin Login Password verification
 app.post('/api/admin/login', (req, res) => {
-  const { password } = req.body;
-  if (password === 'Sansaigon1766!!1') {
+  const { password } = req.body || {};
+  const settings = getSettings();
+  const validPassword = settings.adminPassword || process.env.ADMIN_PASSWORD || 'Sansaigon1766!!1';
+
+  if (password && String(password).trim() === validPassword) {
     return res.json({ success: true, token: 'admin-authorized-token', message: 'Đăng nhập Admin thành công!' });
   }
-  return res.status(401).json({ success: false, error: 'Mật khẩu Admin không đúng!' });
+  return res.json({ success: false, error: 'Mật khẩu Admin không chính xác!' });
+});
+
+// Endpoint to change Admin password & Secret Admin URL Path
+app.post('/api/admin/security', (req, res) => {
+  const { currentPassword, newPassword, adminSecretPath } = req.body || {};
+  const settings = getSettings();
+
+  if (!currentPassword || String(currentPassword).trim() !== settings.adminPassword) {
+    return res.status(401).json({ success: false, error: 'Mật khẩu hiện tại không đúng!' });
+  }
+
+  if (newPassword && newPassword.trim().length >= 6) {
+    settings.adminPassword = newPassword.trim();
+  }
+
+  if (adminSecretPath && adminSecretPath.trim().length >= 3) {
+    // Sanitize to valid slug path
+    const cleanPath = adminSecretPath.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    settings.adminSecretPath = cleanPath;
+  }
+
+  saveSettings(settings);
+  res.json({
+    success: true,
+    message: 'Đã cập nhật mật khẩu và đường dẫn Admin bảo mật thành công!',
+    adminSecretPath: settings.adminSecretPath,
+  });
 });
 
 // Quick update status & available rooms
@@ -459,7 +495,9 @@ app.get('/api/consultations', (req, res) => {
 
 // 9. Admin Settings Endpoints (Toggle Mock Data)
 app.get('/api/settings', (req, res) => {
-  res.json({ success: true, settings: getSettings() });
+  const settings = getSettings();
+  const { adminPassword, ...safeSettings } = settings;
+  res.json({ success: true, settings: safeSettings });
 });
 
 app.post('/api/settings', (req, res) => {

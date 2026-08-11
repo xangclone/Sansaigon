@@ -3,7 +3,7 @@ import {
   ShieldCheck, FileSpreadsheet, Plus, Trash2, Edit3,
   CheckCircle2, RefreshCw, Phone, User, Building2, Eye, Search, Sparkles, Layers,
   BarChart3, TrendingUp, Smartphone, Monitor, ArrowLeft, Home, Lock, KeyRound, Clock, MessageSquare, Gift, Settings,
-  Facebook, MessageCircle, Mail, Globe, Power, AlertTriangle
+  Facebook, MessageCircle, Mail, Globe, Power, AlertTriangle, Copy
 } from 'lucide-react';
 import { RoomListing, RoomStatus, ListingType } from '../types';
 import { SAIGON_DISTRICTS } from '../data/mockListings';
@@ -54,6 +54,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [statsData, setStatsData] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState<boolean>(false);
 
+  // Admin Security & Custom Link State
+  const [adminSecretPath, setAdminSecretPath] = useState<string>('quan-tri-bao-mat-2026');
+  const [currPasswordInput, setCurrPasswordInput] = useState<string>('');
+  const [newPasswordInput, setNewPasswordInput] = useState<string>('');
+  const [newSecretPathInput, setNewSecretPathInput] = useState<string>('quan-tri-bao-mat-2026');
+  const [isUpdatingSecurity, setIsUpdatingSecurity] = useState<boolean>(false);
+  const [securityMsg, setSecurityMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [copiedSecretUrl, setCopiedSecretUrl] = useState<boolean>(false);
+
   // Status Toast Notification
   const [toastMsg, setToastMsg] = useState('');
 
@@ -99,6 +108,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           if (data.settings.enableEmail !== undefined) setEnableEmail(Boolean(data.settings.enableEmail));
           if (data.settings.fanpageUrl) setFanpageUrl(data.settings.fanpageUrl);
           if (data.settings.enableFanpage !== undefined) setEnableFanpage(Boolean(data.settings.enableFanpage));
+          if (data.settings.adminSecretPath) {
+            setAdminSecretPath(data.settings.adminSecretPath);
+            setNewSecretPathInput(data.settings.adminSecretPath);
+          }
         }
       }
     } catch (err) {
@@ -257,6 +270,47 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       }
     } catch (err) {
       setLoginError('Lỗi kết nối máy chủ xác thực');
+    }
+  };
+
+  const handleSaveSecurity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSecurityMsg(null);
+
+    if (!currPasswordInput) {
+      setSecurityMsg({ type: 'error', text: 'Vui lòng nhập Mật khẩu Admin hiện tại để xác nhận thay đổi.' });
+      return;
+    }
+
+    setIsUpdatingSecurity(true);
+    try {
+      const res = await fetch('/api/admin/security', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: currPasswordInput,
+          newPassword: newPasswordInput || undefined,
+          adminSecretPath: newSecretPathInput || undefined,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setSecurityMsg({ type: 'success', text: data.message });
+        if (data.adminSecretPath) {
+          setAdminSecretPath(data.adminSecretPath);
+          setNewSecretPathInput(data.adminSecretPath);
+        }
+        setCurrPasswordInput('');
+        setNewPasswordInput('');
+        showToast('🔒 Đã lưu mật khẩu & đường dẫn bảo mật Admin mới!');
+      } else {
+        setSecurityMsg({ type: 'error', text: data.error || 'Thao tác bảo mật thất bại' });
+      }
+    } catch (err) {
+      setSecurityMsg({ type: 'error', text: 'Lỗi kết nối máy chủ xác thực' });
+    } finally {
+      setIsUpdatingSecurity(false);
     }
   };
 
@@ -1330,6 +1384,138 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           {/* TAB 5: GOOGLE SHEETS & SYSTEM CONFIG */}
           {activeTab === 'sheets' && (
             <div className="space-y-6">
+
+              {/* 🔒 ADMIN SECURITY & SECRET LINK CONFIGURATION CARD */}
+              <div className="bg-slate-950 p-6 rounded-3xl border border-rose-900/40 space-y-5">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                  <div>
+                    <h2 className="text-lg font-black text-rose-400 flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-rose-400" />
+                      <span>🔒 CẤU HÌNH BẢO MẬT ADMIN & ĐƯỜNG DẪN TRUY CẬP BẢO MẬT</span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Đường dẫn Admin mặc định (/admin hoặc #admin) đã bị tắt hoàn toàn. Chỉ có thể truy cập bằng Liên kết Bảo mật bên dưới.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Secret Link Display Box */}
+                <div className="p-4 bg-slate-900 rounded-2xl border border-slate-800 space-y-2">
+                  <label className="text-xs font-black text-amber-400 uppercase tracking-wide block">
+                    🔗 Liên kết Truy Cập Admin Bảo Mật Của Bạn (Lưu Bookmark):
+                  </label>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${window.location.origin}/#${adminSecretPath}`}
+                      className="flex-1 p-3 bg-slate-950 border border-slate-700 rounded-xl font-mono text-xs text-emerald-400 font-bold outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/#${adminSecretPath}`);
+                        setCopiedSecretUrl(true);
+                        setTimeout(() => setCopiedSecretUrl(false), 2500);
+                      }}
+                      className="px-4 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                    >
+                      {copiedSecretUrl ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                          <span>Đã Sao Chép!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          <span>Sao Chép Link Admin</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 italic">
+                    💡 Mẹo: Hãy lưu đường dẫn này vào Bookmark trình duyệt của bạn. Tuyệt đối không chia sẻ đường dẫn này cho người lạ.
+                  </p>
+                </div>
+
+                {/* Security Update Form */}
+                <form onSubmit={handleSaveSecurity} className="space-y-4 pt-2">
+                  {securityMsg && (
+                    <div className={`p-3.5 rounded-xl border text-xs font-bold ${
+                      securityMsg.type === 'success'
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                    }`}>
+                      {securityMsg.text}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
+                        Mật Khẩu Hiện Tại <span className="text-rose-400">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={currPasswordInput}
+                        onChange={(e) => setCurrPasswordInput(e.target.value)}
+                        placeholder="Nhập mật khẩu đang dùng..."
+                        className="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white outline-none focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
+                        Mật Khẩu Mới (Tùy chọn)
+                      </label>
+                      <input
+                        type="password"
+                        value={newPasswordInput}
+                        onChange={(e) => setNewPasswordInput(e.target.value)}
+                        placeholder="Để trống nếu không đổi..."
+                        className="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white outline-none focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
+                        Đường Dẫn Slug Admin Mới
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={newSecretPathInput}
+                          onChange={(e) => setNewSecretPathInput(e.target.value)}
+                          placeholder="VD: quan-tri-sansaigon-2026"
+                          className="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-xs font-mono text-amber-400 outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      disabled={isUpdatingSecurity}
+                      className="px-6 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl shadow-md cursor-pointer flex items-center gap-2"
+                    >
+                      {isUpdatingSecurity ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Đang Cập Nhật...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="w-4 h-4" />
+                          <span>Lưu Bảo Mật &amp; Đổi Đường Dẫn</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
               {/* Contact Phone, Zalo, Email & Fanpage Configuration Card */}
               <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-5">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-4">

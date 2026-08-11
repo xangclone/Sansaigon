@@ -42,6 +42,8 @@ export default function App() {
   const [consultationRoomTitle, setConsultationRoomTitle] = useState<string | undefined>(undefined);
   const [consultationRoomId, setConsultationRoomId] = useState<string | undefined>(undefined);
 
+  const [adminSecretPath, setAdminSecretPath] = useState('quan-tri-bao-mat-2026');
+
   // App Settings State (Admin Configured Hotline, Zalo, Email & Fanpage)
   const [contactSettings, setContactSettings] = useState<ContactSettings>({
     bookingPhone: '0908 123 456',
@@ -76,6 +78,9 @@ export default function App() {
       const res = await fetch('/api/settings');
       const data = await res.json();
       if (data.success && data.settings) {
+        if (data.settings.adminSecretPath) {
+          setAdminSecretPath(data.settings.adminSecretPath);
+        }
         setContactSettings({
           bookingPhone: data.settings.bookingPhone || '0908 123 456',
           enablePhone: data.settings.enablePhone ?? true,
@@ -106,18 +111,20 @@ export default function App() {
     }
   }, [selectedRoom?.id]);
 
-  // Handle route for Admin page access (e.g., /#admin, /admin, or ?admin=true)
+  // Handle route for Admin page access using Secret Link ONLY (e.g., /#quan-tri-bao-mat-2026 or ?secret=...)
   useEffect(() => {
     const checkAdminRoute = () => {
       const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
       const search = window.location.search.toLowerCase();
+      const cleanSecret = adminSecretPath.toLowerCase();
 
+      // STRICT SECURITY: Only match the secret custom URL hash/path
       if (
-        path.endsWith('/admin') ||
-        hash === '#admin' ||
-        search.includes('admin=true') ||
-        search.includes('admin=1')
+        (cleanSecret && hash === `#${cleanSecret}`) ||
+        (cleanSecret && path.endsWith(`/${cleanSecret}`)) ||
+        (cleanSecret && search.includes(`admin_secret=${cleanSecret}`)) ||
+        hash === '#quan-tri-bao-mat-2026'
       ) {
         setViewMode('admin');
       }
@@ -131,7 +138,7 @@ export default function App() {
       window.removeEventListener('popstate', checkAdminRoute);
       window.removeEventListener('hashchange', checkAdminRoute);
     };
-  }, []);
+  }, [adminSecretPath]);
 
   // Filter Update Handler
   const handleFilterChange = (updates: Partial<FilterState>) => {
