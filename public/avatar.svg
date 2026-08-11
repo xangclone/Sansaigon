@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#111c38" />
+      <stop offset="70%" stop-color="#080e1e" />
+      <stop offset="100%" stop-color="#03060d" />
+    </radialGradient>
+
+    <!-- Gold Accent Gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FCD34D" />
+      <stop offset="50%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#B45309" />
+    </linearGradient>
+
+    <!-- Metallic Gold Border -->
+    <linearGradient id="goldBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FEF08A" />
+      <stop offset="25%" stop-color="#F59E0B" />
+      <stop offset="50%" stop-color="#FFFBEB" />
+      <stop offset="75%" stop-color="#D97706" />
+      <stop offset="100%" stop-color="#78350F" />
+    </linearGradient>
+
+    <!-- Blue Glow -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Outer Circle Border -->
+  <circle cx="250" cy="250" r="242" fill="url(#bgGrad)" stroke="url(#goldBorder)" stroke-width="12" />
+  <circle cx="250" cy="250" r="232" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.3" />
+
+  <!-- Background Decorative Room Window Graphic -->
+  <g opacity="0.18">
+    <rect x="220" y="80" width="220" height="280" rx="12" fill="none" stroke="#F59E0B" stroke-width="2" />
+    <line x1="330" y1="80" x2="330" y2="360" stroke="#F59E0B" stroke-width="2" />
+    <line x1="220" y1="200" x2="440" y2="200" stroke="#F59E0B" stroke-width="2" />
+  </g>
+
+  <!-- Roof House Icon Top Center -->
+  <g transform="translate(180, 28)">
+    <polygon points="70,12 135,50 120,50 120,70 100,70 100,62 70,22 40,62 40,70 20,70 20,50 5,50" fill="url(#goldGrad)" />
+    <rect x="58" y="48" width="10" height="12" fill="#080e1e" />
+    <rect x="72" y="48" width="10" height="12" fill="#080e1e" />
+    <rect x="58" y="64" width="10" height="12" fill="#080e1e" />
+    <rect x="72" y="64" width="10" height="12" fill="#080e1e" />
+  </g>
+
+  <!-- Main Brand Title: San Sài gòn -->
+  <g text-anchor="middle">
+    <!-- SAN in cursive stylized font -->
+    <text x="235" y="142" font-family="'Brush Script MT', 'Dancing Script', 'Playfair Display', cursive, sans-serif" font-size="92" font-weight="900" fill="#ffffff" font-style="italic" letter-spacing="-1">San</text>
+    <text x="295" y="172" font-family="'Brush Script MT', 'Dancing Script', cursive, sans-serif" font-size="38" font-weight="bold" fill="url(#goldGrad)">Sài gòn</text>
+    <!-- Heart icon -->
+    <path d="M 368 158 C 368 153, 373 148, 378 152 C 383 148, 388 153, 388 158 C 388 166, 378 172, 378 172 C 378 172, 368 166, 368 158 Z" fill="none" stroke="url(#goldGrad)" stroke-width="2.5" />
+  </g>
+
+  <!-- Title Badges: PHÒNG TRỌ KÝ TÚC XÁ TẠI SÀI GÒN -->
+  <g text-anchor="middle">
+    <text x="250" y="215" font-family="'Montserrat', 'Arial Black', sans-serif" font-size="34" font-weight="900" fill="#ffffff" letter-spacing="1">PHÒNG TRỌ</text>
+    <text x="250" y="258" font-family="'Montserrat', 'Arial Black', sans-serif" font-size="34" font-weight="900" fill="url(#goldGrad)" letter-spacing="1">KÝ TÚC XÁ</text>
+  </g>
+
+  <!-- Pill Badge: TẠI SÀI GÒN -->
+  <g transform="translate(130, 276)">
+    <rect x="0" y="0" width="240" height="38" rx="19" fill="#ffffff" stroke="url(#goldGrad)" stroke-width="2" />
+    <!-- Location Pin -->
+    <path d="M 38 12 C 32 12, 27 17, 27 23 C 27 30, 38 38, 38 38 C 38 38, 49 30, 49 23 C 49 17, 44 12, 38 12 Z M 38 26 C 36 26, 34 24, 34 22 C 34 20, 36 18, 38 18 C 40 18, 42 20, 42 22 C 42 24, 40 26, 38 26 Z" fill="#080e1e" />
+    <text x="135" y="26" font-family="'Montserrat', 'Arial Black', sans-serif" font-size="19" font-weight="900" fill="#080e1e" text-anchor="middle" letter-spacing="2">TẠI SÀI GÒN</text>
+  </g>
+
+  <!-- Left Features List -->
+  <g transform="translate(45, 335)" font-family="'Montserrat', sans-serif" font-size="13" font-weight="800">
+    <!-- Item 1 -->
+    <g transform="translate(0, 0)">
+      <circle cx="14" cy="12" r="12" fill="none" stroke="url(#goldGrad)" stroke-width="2" />
+      <path d="M 8 12 L 12 16 L 20 8" fill="none" stroke="url(#goldGrad)" stroke-width="2.5" stroke-linecap="round" />
+      <text x="34" y="17" fill="#ffffff" letter-spacing="0.5">PHÒNG ĐẸP – GIÁ TỐT</text>
+    </g>
+    <!-- Item 2 -->
+    <g transform="translate(0, 30)">
+      <circle cx="14" cy="12" r="12" fill="none" stroke="url(#goldGrad)" stroke-width="2" />
+      <path d="M 8 12 L 12 16 L 20 8" fill="none" stroke="url(#goldGrad)" stroke-width="2.5" stroke-linecap="round" />
+      <text x="34" y="17" fill="#ffffff" letter-spacing="0.5">VỊ TRÍ THUẬN TIỆN</text>
+    </g>
+    <!-- Item 3 -->
+    <g transform="translate(0, 60)">
+      <circle cx="14" cy="12" r="12" fill="none" stroke="url(#goldGrad)" stroke-width="2" />
+      <path d="M 8 12 L 12 16 L 20 8" fill="none" stroke="url(#goldGrad)" stroke-width="2.5" stroke-linecap="round" />
+      <text x="34" y="17" fill="#ffffff" letter-spacing="0.5">AN NINH – SẠCH SẼ</text>
+    </g>
+  </g>
+
+  <!-- Right Seal Emblem: Sài Gòn Nơi An Cư Lập Nghiệp -->
+  <g transform="translate(330, 318)">
+    <circle cx="55" cy="55" r="52" fill="#080e1e" stroke="url(#goldGrad)" stroke-width="2.5" />
+    <circle cx="55" cy="55" r="47" fill="none" stroke="#F59E0B" stroke-width="1" stroke-dasharray="3,3" />
+    
+    <!-- Building Silhouettes in Seal -->
+    <g fill="none" stroke="url(#goldGrad)" stroke-width="1.5">
+      <rect x="35" y="30" width="14" height="32" rx="1" />
+      <rect x="52" y="22" width="16" height="40" rx="1" />
+      <rect x="71" y="34" width="12" height="28" rx="1" />
+    </g>
+    <text x="55" y="76" font-family="'Brush Script MT', cursive, sans-serif" font-size="16" font-weight="bold" fill="url(#goldGrad)" text-anchor="middle">Sài Gòn ♡</text>
+    <text x="55" y="90" font-family="'Montserrat', sans-serif" font-size="8" font-weight="800" fill="#ffffff" text-anchor="middle">NƠI AN CƯ – LẬP NGHIỆP</text>
+  </g>
+
+  <!-- Bottom Landmark & City Skyline Silhouette -->
+  <g transform="translate(80, 400)" fill="url(#goldGrad)" opacity="0.4">
+    <rect x="60" y="20" width="4" height="25" />
+    <rect x="120" y="5" width="6" height="40" />
+    <polygon points="123,0 120,5 126,5" />
+    <rect x="200" y="15" width="5" height="30" />
+  </g>
+
+  <!-- Bottom CTA Pill: INBOX NGAY ĐỂ ĐƯỢC TƯ VẤN -->
+  <g transform="translate(110, 428)" filter="url(#glow)">
+    <rect x="0" y="0" width="280" height="44" rx="22" fill="url(#goldGrad)" />
+    <circle cx="28" cy="22" r="14" fill="#080e1e" />
+    <!-- Message dots icon -->
+    <circle cx="22" cy="22" r="2" fill="#ffffff" />
+    <circle cx="28" cy="22" r="2" fill="#ffffff" />
+    <circle cx="34" cy="22" r="2" fill="#ffffff" />
+    <text x="156" y="20" font-family="'Montserrat', 'Arial Black', sans-serif" font-size="15" font-weight="900" fill="#080e1e" text-anchor="middle" letter-spacing="1">INBOX NGAY</text>
+    <text x="156" y="34" font-family="'Montserrat', sans-serif" font-size="11" font-weight="800" fill="#080e1e" text-anchor="middle" letter-spacing="0.5">ĐỂ ĐƯỢC TƯ VẤN</text>
+  </g>
+</svg>

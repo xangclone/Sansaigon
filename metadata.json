@@ -1,0 +1,6 @@
+{
+  "name": "San Sài gòn",
+  "description": "Sàn thông tin tìm kiếm phòng trọ, ký túc xá, phòng pass tại Sài Gòn. Lọc khu vực, giá cả, trạng thái phòng, đồng bộ Google Sheets và đăng bài với upload hình ảnh.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
