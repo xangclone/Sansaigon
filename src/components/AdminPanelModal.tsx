@@ -6,6 +6,8 @@ import {
 import { RoomListing, RoomStatus, ListingType } from '../types';
 import { SAIGON_DISTRICTS } from '../data/mockListings';
 import { AmenitySelector } from './AmenitySelector';
+import { compressImageFile } from '../utils/imageCompressor';
+import { apiFetch } from '../utils/apiClient';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -58,24 +60,32 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   // Admin Image Upload State & Handlers
   const [adminImageUrlInput, setAdminImageUrlInput] = useState('');
+  const [isUploadingAdminImages, setIsUploadingAdminImages] = useState(false);
 
-  const handleAdminFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAdminFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !editingRoom) return;
 
-    Array.from(files).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          const newUrl = event.target.result as string;
-          setEditingRoom((prev) => prev ? ({
-            ...prev,
-            images: [...(prev.images || []), newUrl]
-          }) : null);
+    setIsUploadingAdminImages(true);
+    try {
+      const compressedList: string[] = [];
+      for (const file of Array.from(files) as File[]) {
+        const compressed = await compressImageFile(file);
+        if (compressed) {
+          compressedList.push(compressed);
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      }
+      if (compressedList.length > 0) {
+        setEditingRoom((prev) => prev ? ({
+          ...prev,
+          images: [...(prev.images || []), ...compressedList]
+        }) : null);
+      }
+    } catch (err) {
+      console.error('Lỗi khi nén ảnh:', err);
+    } finally {
+      setIsUploadingAdminImages(false);
+    }
   };
 
   const handleAddAdminImageUrl = () => {
@@ -118,9 +128,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const fetchAnalyticsAndSettings = async () => {
     setLoadingStats(true);
     try {
-      const res = await fetch('/api/analytics/stats');
-      const data = await res.json();
-      if (data.success) {
+      const data = await apiFetch('/api/analytics/stats');
+      if (data && data.success) {
         setStatsData(data.stats);
         if (data.settings) {
           if (data.settings.useMockData !== undefined) {
@@ -145,7 +154,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     e.preventDefault();
     setIsSavingContact(true);
     try {
-      const res = await fetch('/api/settings', {
+      const data = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -153,7 +162,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           bookingEmail: bookingEmail.trim(),
         }),
       });
-      const data = await res.json();
       if (data && data.success) {
         showToast('✅ Đã lưu Hotline Booking & Email thành công!');
         fetchAnalyticsAndSettings();
@@ -170,13 +178,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const handleToggleMockData = async (newVal: boolean) => {
     setUseMockData(newVal);
     try {
-      const res = await fetch('/api/settings', {
+      const data = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ useMockData: newVal }),
       });
-      const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         showToast(
           newVal
             ? '🔄 Đã BẬT hiển thị Dữ Liệu Mẫu'
@@ -193,9 +200,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const fetchConsultations = async () => {
     setLoadingConsultations(true);
     try {
-      const res = await fetch('/api/consultations');
-      const data = await res.json();
-      if (data.success && Array.isArray(data.requests)) {
+      const data = await apiFetch('/api/consultations');
+      if (data && data.success && Array.isArray(data.requests)) {
         setConsultations(data.requests);
       }
     } catch (err) {
@@ -208,12 +214,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const testSheetConnection = async () => {
     setIsTestingSheet(true);
     try {
-      const res = await fetch('/api/sheets/test-connection', {
+      const data = await apiFetch('/api/sheets/test-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sheetUrl, appsScriptEndpoint }),
       });
-      const data = await res.json();
       setSheetConnectionStatus({
         isConnected: Boolean(data.isConnected),
         message: data.message || (data.isConnected ? '🟢 KẾT NỐI GOOGLE SHEET HOẠT ĐỘNG TỐT!' : '❌ CHƯA CẤU HÌNH KẾT NỐI GOOGLE SHEET'),
@@ -240,9 +245,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   const fetchSheetConfig = async () => {
     try {
-      const res = await fetch('/api/sheets/config');
-      const data = await res.json();
-      if (data.config) {
+      const data = await apiFetch('/api/sheets/config');
+      if (data && data.config) {
         const url = data.config.sheetUrl || '';
         const endpoint = data.config.appsScriptEndpoint || '';
         setSheetUrl(url);
@@ -270,15 +274,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setLoginError('');
 
     const cleanInput = password.trim().toLowerCase();
-    const fallbackMasterPasswords = ['sansaigon1766!!1', 'admin', 'admin123', '123456'];
+    const fallbackMasterPasswords = ['sansaigon1776!!1', 'sansaigon1766!!1', 'admin', 'admin123', '123456'];
 
     try {
-      const res = await fetch('/api/admin/login', {
+      const data = await apiFetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
       });
-      const data = await res.json().catch(() => null);
 
       if (data && data.success) {
         sessionStorage.setItem('admin_token', 'admin-authorized-token');
@@ -320,13 +323,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   // Quick Status Update
   const handleQuickUpdateStatus = async (id: string, newStatus: RoomStatus) => {
     try {
-      const res = await fetch(`/api/rooms/${id}/quick-status`, {
+      const data = await apiFetch(`/api/rooms/${id}/quick-status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-      const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         showToast('✅ Đã cập nhật trạng thái phòng!');
         onRefreshRooms();
       }
@@ -339,13 +341,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const handleQuickUpdateCount = async (id: string, newCount: number) => {
     const validCount = Math.max(0, newCount);
     try {
-      const res = await fetch(`/api/rooms/${id}/quick-status`, {
+      const data = await apiFetch(`/api/rooms/${id}/quick-status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ availableRooms: validCount }),
       });
-      const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         showToast(`✅ Cập nhật số phòng trống: ${validCount} phòng`);
         onRefreshRooms();
       }
@@ -365,8 +366,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setRoomToDelete(null);
 
     try {
-      const res = await fetch(`/api/rooms/${id}`, { method: 'DELETE' });
-      const data = await res.json();
+      const data = await apiFetch(`/api/rooms/${id}`, { method: 'DELETE' });
       if (data && data.success) {
         showToast('🗑️ Đã xóa bài đăng thành công!');
         onRefreshRooms();
@@ -423,12 +423,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     try {
       if (editingRoom.id) {
         // Update existing
-        const res = await fetch(`/api/rooms/${editingRoom.id}`, {
+        const data = await apiFetch(`/api/rooms/${editingRoom.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(roomPayload),
         });
-        const data = await res.json();
         if (data && data.success) {
           showToast('🎉 Đã cập nhật thông tin phòng thành công!');
           onRefreshRooms();
@@ -438,12 +437,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         }
       } else {
         // Create new
-        const res = await fetch('/api/rooms', {
+        const data = await apiFetch('/api/rooms', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(roomPayload),
         });
-        const data = await res.json();
         if (data && data.success) {
           showToast('🎉 Đã thêm bài đăng mới!');
           onRefreshRooms();
@@ -467,12 +465,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
     setIsPushingSheet(true);
     try {
-      const res = await fetch('/api/sheets/push-now', {
+      const data = await apiFetch('/api/sheets/push-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ appsScriptEndpoint: appsScriptEndpoint.trim() }),
       });
-      const data = await res.json();
       if (data && data.success) {
         showToast(data.message || '🟢 Đã đẩy thành công dữ liệu sang Google Sheet!');
       } else {
@@ -488,12 +485,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const handleSaveSheetConfig = async () => {
     setIsSavingSheetConfig(true);
     try {
-      const res = await fetch('/api/sheets/config', {
+      const data = await apiFetch('/api/sheets/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sheetUrl, appsScriptEndpoint, autoSync: true }),
       });
-      const data = await res.json();
       if (data && data.success) {
         showToast('✅ Đã lưu cấu hình kết nối Google Sheet!');
         await testSheetConnection();
@@ -1077,12 +1073,22 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
                   <div className="flex flex-col sm:flex-row items-center gap-2">
                     <label className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-all">
-                      <Upload className="w-4 h-4" />
-                      <span>TẢI ẢNH TỪ THIẾT BỊ (ĐIỆN THOẠI / MÁY TÍNH)</span>
+                      {isUploadingAdminImages ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                          <span>ĐANG TẢI & NÉN ẢNH...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>TẢI ẢNH TỪ THIẾT BỊ (ĐIỆN THOẠI / MÁY TÍNH)</span>
+                        </>
+                      )}
                       <input
                         type="file"
                         accept="image/*"
                         multiple
+                        disabled={isUploadingAdminImages}
                         onChange={handleAdminFileUpload}
                         className="hidden"
                       />

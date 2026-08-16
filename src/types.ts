@@ -29,6 +29,7 @@ export interface RoomListing {
   depositSupport?: string; // Hỗ trợ tiền cọc (dành cho phòng pass hoặc ưu đãi cọc)
   isVerified?: boolean;
   isFeatured?: boolean;
+  isMock?: boolean;
   googleSheetRowId?: string | number;
 }
 

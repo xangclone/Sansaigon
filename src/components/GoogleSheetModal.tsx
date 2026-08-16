@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, FileSpreadsheet, Download, RefreshCw, CheckCircle2, Copy, ExternalLink, ShieldCheck, Link2 } from 'lucide-react';
 import { GoogleSheetSyncConfig } from '../types';
+import { apiFetch } from '../utils/apiClient';
 
 interface GoogleSheetModalProps {
   isOpen: boolean;
@@ -23,10 +24,9 @@ export const GoogleSheetModal: React.FC<GoogleSheetModalProps> = ({
   const [copiedCode, setCopiedCode] = useState(false);
 
   useEffect(() => {
-    fetch('/api/sheets/config')
-      .then((res) => res.json())
+    apiFetch('/api/sheets/config')
       .then((data) => {
-        if (data.config) {
+        if (data && data.config) {
           setSheetUrl(data.config.sheetUrl || '');
           setAppsScriptEndpoint(data.config.appsScriptEndpoint || '');
           setAutoSync(data.config.autoSync ?? true);
@@ -44,12 +44,11 @@ export const GoogleSheetModal: React.FC<GoogleSheetModalProps> = ({
     setSaveError('');
     setPushSuccess('');
     try {
-      const res = await fetch('/api/sheets/config', {
+      const data = await apiFetch('/api/sheets/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sheetUrl, appsScriptEndpoint, autoSync }),
       });
-      const data = await res.json();
       if (data && data.success) {
         setLastSynced(data.config.lastSyncedAt);
         setIsSaved(true);
@@ -71,12 +70,11 @@ export const GoogleSheetModal: React.FC<GoogleSheetModalProps> = ({
     setSaveError('');
     setPushSuccess('');
     try {
-      const res = await fetch('/api/sheets/push-now', {
+      const data = await apiFetch('/api/sheets/push-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ appsScriptEndpoint: appsScriptEndpoint.trim() }),
       });
-      const data = await res.json();
       if (data && data.success) {
         setLastSynced(data.lastSyncedAt);
         setPushSuccess(data.message || '🎉 Đã gửi thành công dữ liệu sang Google Sheet!');

@@ -9,14 +9,68 @@ const app = express();
 const PORT = 3000;
 
 // Increase JSON body limit for image uploads
-app.use(express.json({ limit: '25mb' }));
-app.use(express.urlencoded({ limit: '25mb', extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Simple JSON file storage for persistent rooms
-const DATA_FILE = path.join(process.cwd(), 'rooms_db.json');
-const CONFIG_FILE = path.join(process.cwd(), 'sheets_config.json');
-const SETTINGS_FILE = path.join(process.cwd(), 'settings.json');
-const ANALYTICS_FILE = path.join(process.cwd(), 'analytics.json');
+function parseNumeric(val: any, fallback = 0): number {
+  if (typeof val === 'number') return isNaN(val) ? fallback : val;
+  if (!val) return fallback;
+  const str = String(val).replace(/[^0-9.]/g, '');
+  const parsed = parseFloat(str);
+  return isNaN(parsed) ? fallback : parsed;
+}
+
+// Safe File Storage Helpers for Vercel / Cloud Run / Local
+const memoryStore: Record<string, string> = {};
+
+function safeReadJSON(filename: string, fallback: any): any {
+  if (memoryStore[filename]) {
+    try {
+      return JSON.parse(memoryStore[filename]);
+    } catch (e) {}
+  }
+
+  const tmpPath = path.join('/tmp', filename);
+  try {
+    if (fs.existsSync(tmpPath)) {
+      const data = fs.readFileSync(tmpPath, 'utf-8');
+      memoryStore[filename] = data;
+      return JSON.parse(data);
+    }
+  } catch (e) {}
+
+  const rootPath = path.join(process.cwd(), filename);
+  try {
+    if (fs.existsSync(rootPath)) {
+      const data = fs.readFileSync(rootPath, 'utf-8');
+      memoryStore[filename] = data;
+      return JSON.parse(data);
+    }
+  } catch (e) {}
+
+  return fallback;
+}
+
+function safeWriteJSON(filename: string, data: any): void {
+  const jsonStr = JSON.stringify(data, null, 2);
+  memoryStore[filename] = jsonStr;
+
+  let written = false;
+  try {
+    const rootPath = path.join(process.cwd(), filename);
+    fs.writeFileSync(rootPath, jsonStr, 'utf-8');
+    written = true;
+  } catch (err) {
+    // Ignore read-only filesystem errors on Vercel
+  }
+
+  if (!written) {
+    try {
+      const tmpPath = path.join('/tmp', filename);
+      fs.writeFileSync(tmpPath, jsonStr, 'utf-8');
+    } catch (err) {}
+  }
+}
 
 // System Settings Helper
 interface AppSettings {
@@ -33,48 +87,39 @@ interface AppSettings {
   adminPassword: string;
 }
 
+const DEFAULT_SETTINGS: AppSettings = {
+  useMockData: false,
+  bookingPhone: '0908 123 456',
+  enablePhone: true,
+  zaloPhone: '0908 123 456',
+  enableZalo: true,
+  bookingEmail: 'booking@sansaigon.vn',
+  enableEmail: true,
+  fanpageUrl: 'https://facebook.com/sansaigon.vn',
+  enableFanpage: true,
+  adminSecretPath: 'quan-tri-bao-mat-2026',
+  adminPassword: 'Sansaigon1766!!1',
+};
+
 function getSettings(): AppSettings {
-  try {
-    if (fs.existsSync(SETTINGS_FILE)) {
-      const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
-      return {
-        useMockData: data.useMockData ?? false,
-        bookingPhone: data.bookingPhone || '0908 123 456',
-        enablePhone: data.enablePhone ?? true,
-        zaloPhone: data.zaloPhone || data.bookingPhone || '0908 123 456',
-        enableZalo: data.enableZalo ?? true,
-        bookingEmail: data.bookingEmail || 'booking@sansaigon.vn',
-        enableEmail: data.enableEmail ?? true,
-        fanpageUrl: data.fanpageUrl || 'https://facebook.com/sansaigon.vn',
-        enableFanpage: data.enableFanpage ?? true,
-        adminSecretPath: data.adminSecretPath || 'quan-tri-bao-mat-2026',
-        adminPassword: data.adminPassword || 'Sansaigon1766!!1',
-      };
-    }
-  } catch (err) {
-    console.error('Error reading settings:', err);
-  }
+  const data = safeReadJSON('settings.json', DEFAULT_SETTINGS);
   return {
-    useMockData: false,
-    bookingPhone: '0908 123 456',
-    enablePhone: true,
-    zaloPhone: '0908 123 456',
-    enableZalo: true,
-    bookingEmail: 'booking@sansaigon.vn',
-    enableEmail: true,
-    fanpageUrl: 'https://facebook.com/sansaigon.vn',
-    enableFanpage: true,
-    adminSecretPath: 'quan-tri-bao-mat-2026',
-    adminPassword: 'Sansaigon1766!!1',
+    useMockData: data.useMockData ?? false,
+    bookingPhone: data.bookingPhone || DEFAULT_SETTINGS.bookingPhone,
+    enablePhone: data.enablePhone ?? true,
+    zaloPhone: data.zaloPhone || data.bookingPhone || DEFAULT_SETTINGS.zaloPhone,
+    enableZalo: data.enableZalo ?? true,
+    bookingEmail: data.bookingEmail || DEFAULT_SETTINGS.bookingEmail,
+    enableEmail: data.enableEmail ?? true,
+    fanpageUrl: data.fanpageUrl || DEFAULT_SETTINGS.fanpageUrl,
+    enableFanpage: data.enableFanpage ?? true,
+    adminSecretPath: data.adminSecretPath || DEFAULT_SETTINGS.adminSecretPath,
+    adminPassword: data.adminPassword || DEFAULT_SETTINGS.adminPassword,
   };
 }
 
 function saveSettings(settings: AppSettings) {
-  try {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error saving settings:', err);
-  }
+  safeWriteJSON('settings.json', settings);
 }
 
 // System Analytics Helper
@@ -86,95 +131,64 @@ interface AnalyticsData {
   hourlyVisits?: Record<string, number>;
 }
 
+const DEFAULT_ANALYTICS: AnalyticsData = {
+  totalVisits: 0,
+  roomViews: {},
+  dailyVisits: {},
+  devices: { mobile: 0, desktop: 0 },
+  hourlyVisits: {},
+};
+
 function getAnalytics(): AnalyticsData {
-  try {
-    if (fs.existsSync(ANALYTICS_FILE)) {
-      const data = JSON.parse(fs.readFileSync(ANALYTICS_FILE, 'utf-8'));
-      return {
-        totalVisits: data.totalVisits || 0,
-        roomViews: data.roomViews || {},
-        dailyVisits: data.dailyVisits || {},
-        devices: data.devices || { mobile: 0, desktop: 0 },
-        hourlyVisits: data.hourlyVisits || {},
-      };
-    }
-  } catch (err) {
-    console.error('Error reading analytics:', err);
-  }
+  const data = safeReadJSON('analytics.json', DEFAULT_ANALYTICS);
   return {
-    totalVisits: 0,
-    roomViews: {},
-    dailyVisits: {},
-    devices: { mobile: 0, desktop: 0 },
-    hourlyVisits: {},
+    totalVisits: data.totalVisits || 0,
+    roomViews: data.roomViews || {},
+    dailyVisits: data.dailyVisits || {},
+    devices: data.devices || { mobile: 0, desktop: 0 },
+    hourlyVisits: data.hourlyVisits || {},
   };
 }
 
 function saveAnalytics(data: AnalyticsData) {
-  try {
-    fs.writeFileSync(ANALYTICS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error saving analytics:', err);
-  }
+  safeWriteJSON('analytics.json', data);
 }
 
 // Initialize database file if not exists
 function getRooms(forceAll: boolean = false): RoomListing[] {
-  let allRooms: (RoomListing & { isMock?: boolean })[] = [];
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const fileData = fs.readFileSync(DATA_FILE, 'utf-8');
-      allRooms = JSON.parse(fileData);
-    } else {
-      allRooms = INITIAL_ROOMS.map((r) => ({ ...r, isMock: true }));
-      saveRooms(allRooms);
-    }
-  } catch (err) {
-    console.error('Error reading rooms DB:', err);
+  let allRooms: (RoomListing & { isMock?: boolean })[] = safeReadJSON('rooms_db.json', null);
+  
+  if (!allRooms || !Array.isArray(allRooms) || allRooms.length === 0) {
     allRooms = INITIAL_ROOMS.map((r) => ({ ...r, isMock: true }));
+    saveRooms(allRooms);
   }
 
   if (forceAll) return allRooms;
 
   const settings = getSettings();
   if (!settings.useMockData) {
-    // Only return real rooms created by users or synced from sheet
-    return allRooms.filter((r) => !r.isMock && !r.id.startsWith('sg-00'));
+    return allRooms.filter((r) => !r.isMock);
   }
 
   return allRooms;
 }
 
 function saveRooms(rooms: RoomListing[]) {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(rooms, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error saving rooms DB:', err);
-  }
+  safeWriteJSON('rooms_db.json', rooms);
 }
 
+const DEFAULT_SHEET_CONFIG: GoogleSheetSyncConfig = {
+  sheetUrl: '',
+  appsScriptEndpoint: '',
+  autoSync: false,
+};
+
 function getSheetConfig(): GoogleSheetSyncConfig {
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const fileData = fs.readFileSync(CONFIG_FILE, 'utf-8');
-      return JSON.parse(fileData);
-    }
-  } catch (err) {
-    console.error('Error reading sheet config:', err);
-  }
-  return {
-    sheetUrl: '',
-    appsScriptEndpoint: '',
-    autoSync: false,
-  };
+  return safeReadJSON('sheets_config.json', DEFAULT_SHEET_CONFIG);
 }
 
 function saveSheetConfig(config: GoogleSheetSyncConfig) {
-  try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error saving sheet config:', err);
-  }
+  safeWriteJSON('sheets_config.json', config);
 }
 
 async function notifyGoogleSheetSync(action: 'create' | 'update' | 'delete' | 'sync', roomData?: any) {
@@ -241,8 +255,9 @@ app.post('/api/rooms', (req, res) => {
     const phone = newRoom.phone?.trim() || settings.bookingPhone || '0908123456';
     const district = newRoom.district?.trim() || 'Bình Thạnh';
     
-    if (!newRoom.title || !newRoom.price) {
-      return res.status(400).json({ success: false, error: 'Thiếu thông tin bắt buộc (Tiêu đề, Giá thuê).' });
+    const priceVal = parseNumeric(newRoom.price, 0);
+    if (!newRoom.title || priceVal <= 0) {
+      return res.status(400).json({ success: false, error: 'Thiếu thông tin bắt buộc (Tiêu đề, Giá thuê hợp lệ).' });
     }
 
     const rooms = getRooms(true); // Always fetch full list to modify DB
@@ -251,9 +266,9 @@ app.post('/api/rooms', (req, res) => {
       title: newRoom.title,
       type: newRoom.type || 'phong-tro',
       status: newRoom.status || 'con-trong',
-      price: Number(newRoom.price),
-      deposit: Number(newRoom.deposit || newRoom.price),
-      area: Number(newRoom.area || 20),
+      price: priceVal,
+      deposit: parseNumeric(newRoom.deposit, priceVal),
+      area: parseNumeric(newRoom.area, 20),
       address: newRoom.address || `${district}, TP.HCM`,
       district: district,
       ward: newRoom.ward || '',
@@ -270,10 +285,11 @@ app.post('/api/rooms', (req, res) => {
       internetPrice: newRoom.internetPrice || '100.000 đ/phòng',
       parkingPrice: newRoom.parkingPrice || 'Miễn phí',
       createdAt: new Date().toISOString().split('T')[0],
-      availableRooms: newRoom.availableRooms !== undefined ? Number(newRoom.availableRooms) : 1,
+      availableRooms: newRoom.availableRooms !== undefined ? parseNumeric(newRoom.availableRooms, 1) : 1,
       depositSupport: newRoom.depositSupport || '',
       isVerified: true,
       isFeatured: Boolean(newRoom.isFeatured),
+      isMock: false,
     };
 
     rooms.unshift(createdRoom); // Add to top
@@ -785,6 +801,24 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    // Development SPA HTML Fallback for routes like /quan-tri-bao-mat-2026
+    app.use('*', async (req, res, next) => {
+      const url = req.originalUrl;
+      // Skip API routes so they return proper 404 JSON instead of HTML
+      if (url.startsWith('/api/')) {
+        return next();
+      }
+      try {
+        const indexPath = path.resolve(process.cwd(), 'index.html');
+        let html = fs.readFileSync(indexPath, 'utf-8');
+        html = await vite.transformIndexHtml(url, html);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+      } catch (e: any) {
+        vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -798,4 +832,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
+  startServer();
+}
+
+export default app;

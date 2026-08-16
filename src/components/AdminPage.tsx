@@ -8,6 +8,8 @@ import {
 import { RoomListing, RoomStatus, ListingType } from '../types';
 import { SAIGON_DISTRICTS } from '../data/mockListings';
 import { AmenitySelector } from './AmenitySelector';
+import { compressImageFile } from '../utils/imageCompressor';
+import { apiFetch } from '../utils/apiClient';
 
 interface AdminPageProps {
   onBackToClient: () => void;
@@ -41,24 +43,32 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   // Admin Image Upload State & Handlers
   const [adminImageUrlInput, setAdminImageUrlInput] = useState('');
+  const [isUploadingAdminImages, setIsUploadingAdminImages] = useState(false);
 
-  const handleAdminFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAdminFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !editingRoom) return;
 
-    Array.from(files).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          const newUrl = event.target.result as string;
-          setEditingRoom((prev) => prev ? ({
-            ...prev,
-            images: [...(prev.images || []), newUrl]
-          }) : null);
+    setIsUploadingAdminImages(true);
+    try {
+      const compressedList: string[] = [];
+      for (const file of Array.from(files) as File[]) {
+        const compressed = await compressImageFile(file);
+        if (compressed) {
+          compressedList.push(compressed);
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      }
+      if (compressedList.length > 0) {
+        setEditingRoom((prev) => prev ? ({
+          ...prev,
+          images: [...(prev.images || []), ...compressedList]
+        }) : null);
+      }
+    } catch (err) {
+      console.error('Lỗi nén ảnh:', err);
+    } finally {
+      setIsUploadingAdminImages(false);
+    }
   };
 
   const handleAddAdminImageUrl = () => {
@@ -136,9 +146,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const fetchAnalyticsAndSettings = async () => {
     setLoadingStats(true);
     try {
-      const res = await fetch('/api/analytics/stats');
-      const data = await res.json();
-      if (data.success) {
+      const data = await apiFetch('/api/analytics/stats');
+      if (data && data.success) {
         setStatsData(data.stats);
         if (data.settings) {
           if (data.settings.useMockData !== undefined) setUseMockData(data.settings.useMockData);
@@ -174,7 +183,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }
 
     try {
-      const res = await fetch('/api/settings', {
+      const data = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -188,7 +197,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           enableFanpage,
         }),
       });
-      const data = await res.json();
       if (data && data.success) {
         showToast('✅ Đã lưu thông tin liên hệ & kênh hỗ trợ thành công!');
         fetchAnalyticsAndSettings();
@@ -205,13 +213,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const handleToggleMockData = async (newVal: boolean) => {
     setUseMockData(newVal);
     try {
-      const res = await fetch('/api/settings', {
+      const data = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ useMockData: newVal }),
       });
-      const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         showToast(
           newVal
             ? '🔄 Đã BẬT hiển thị Dữ Liệu Mẫu'
@@ -228,9 +235,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const fetchConsultations = async () => {
     setLoadingConsultations(true);
     try {
-      const res = await fetch('/api/consultations');
-      const data = await res.json();
-      if (data.success && Array.isArray(data.requests)) {
+      const data = await apiFetch('/api/consultations');
+      if (data && data.success && Array.isArray(data.requests)) {
         setConsultations(data.requests);
       }
     } catch (err) {
@@ -243,12 +249,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const testSheetConnection = async () => {
     setIsTestingSheet(true);
     try {
-      const res = await fetch('/api/sheets/test-connection', {
+      const data = await apiFetch('/api/sheets/test-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sheetUrl, appsScriptEndpoint }),
       });
-      const data = await res.json();
       setSheetConnectionStatus({
         isConnected: Boolean(data.isConnected),
         message: data.message || (data.isConnected ? '🟢 KẾT NỐI GOOGLE SHEET HOẠT ĐỘNG TỐT!' : '❌ CHƯA CẤU HÌNH KẾT NỐI GOOGLE SHEET'),
@@ -275,9 +280,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   const fetchSheetConfig = async () => {
     try {
-      const res = await fetch('/api/sheets/config');
-      const data = await res.json();
-      if (data.success && data.config) {
+      const data = await apiFetch('/api/sheets/config');
+      if (data && data.success && data.config) {
         const url = data.config.sheetUrl || '';
         const endpoint = data.config.appsScriptEndpoint || '';
         setSheetUrl(url);
@@ -305,15 +309,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setLoginError('');
 
     const cleanInput = password.trim().toLowerCase();
-    const fallbackMasterPasswords = ['sansaigon1766!!1', 'admin', 'admin123', '123456'];
+    const fallbackMasterPasswords = ['sansaigon1776!!1', 'sansaigon1766!!1', 'admin', 'admin123', '123456'];
 
     try {
-      const res = await fetch('/api/admin/login', {
+      const data = await apiFetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
       });
-      const data = await res.json().catch(() => null);
 
       if (data && data.success) {
         sessionStorage.setItem('admin_token', 'admin-authorized-token');
@@ -361,7 +364,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
     setIsUpdatingSecurity(true);
     try {
-      const res = await fetch('/api/admin/security', {
+      const data = await apiFetch('/api/admin/security', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -370,9 +373,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           adminSecretPath: newSecretPathInput || undefined,
         }),
       });
-      const data = await res.json();
 
-      if (data.success) {
+      if (data && data.success) {
         setSecurityMsg({ type: 'success', text: data.message });
         if (data.adminSecretPath) {
           setAdminSecretPath(data.adminSecretPath);
@@ -393,13 +395,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   const handleQuickStatusChange = async (roomId: string, newStatus: RoomStatus) => {
     try {
-      const res = await fetch(`/api/rooms/${roomId}`, {
+      const data = await apiFetch(`/api/rooms/${roomId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-      const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         showToast(`✅ Đã cập nhật trạng thái phòng #${roomId}`);
         onRefreshRooms();
       }
@@ -418,8 +419,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setRoomToDelete(null);
 
     try {
-      const res = await fetch(`/api/rooms/${id}`, { method: 'DELETE' });
-      const data = await res.json();
+      const data = await apiFetch(`/api/rooms/${id}`, { method: 'DELETE' });
       if (data && data.success) {
         showToast('🗑️ Đã xoá bài đăng thành công!');
         onRefreshRooms();
@@ -449,13 +449,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       const method = editingRoom.id ? 'PUT' : 'POST';
       const url = editingRoom.id ? `/api/rooms/${editingRoom.id}` : '/api/rooms';
 
-      const res = await fetch(url, {
+      const data = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(roomPayload),
       });
 
-      const data = await res.json();
       if (data && data.success) {
         showToast(editingRoom.id ? '✅ Cập nhật phòng thành công!' : '✨ Thêm phòng mới thành công!');
         setEditingRoom(null);
@@ -478,12 +477,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }
     setIsPushingSheet(true);
     try {
-      const res = await fetch('/api/sheets/push-now', {
+      const data = await apiFetch('/api/sheets/push-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ appsScriptEndpoint: appsScriptEndpoint.trim() }),
       });
-      const data = await res.json();
       if (data && data.success) {
         showToast(data.message || '🟢 Đã đẩy thành công dữ liệu sang Google Sheet!');
       } else {
@@ -500,12 +498,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     e.preventDefault();
     setIsSavingSheetConfig(true);
     try {
-      const res = await fetch('/api/sheets/config', {
+      const data = await apiFetch('/api/sheets/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sheetUrl, appsScriptEndpoint }),
       });
-      const data = await res.json();
       if (data && data.success) {
         showToast('✅ Đã lưu cấu hình Google Sheet!');
         await testSheetConnection();
@@ -1412,12 +1409,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
                   <div className="flex flex-col sm:flex-row items-center gap-2">
                     <label className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all">
-                      <Upload className="w-4 h-4" />
-                      <span>TẢI ẢNH TỪ THIẾT BỊ (ĐIỆN THOẠI / MÁY TÍNH)</span>
+                      {isUploadingAdminImages ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                          <span>ĐANG TẢI & NÉN ẢNH...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>TẢI ẢNH TỪ THIẾT BỊ (ĐIỆN THOẠI / MÁY TÍNH)</span>
+                        </>
+                      )}
                       <input
                         type="file"
                         accept="image/*"
                         multiple
+                        disabled={isUploadingAdminImages}
                         onChange={handleAdminFileUpload}
                         className="hidden"
                       />

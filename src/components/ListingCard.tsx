@@ -63,7 +63,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({ room, onSelect, onCons
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between overflow-hidden group hover:-translate-y-1">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex flex-col justify-between overflow-hidden group">
       
       <div>
         {/* Image Thumbnail Container */}
@@ -72,6 +72,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({ room, onSelect, onCons
             src={room.images[0] || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80'}
             alt={room.title}
             referrerPolicy="no-referrer"
+            loading="lazy"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent opacity-80" />

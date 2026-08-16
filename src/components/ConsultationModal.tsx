@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Phone, MessageCircle, Send, CheckCircle2, Sparkles, Clock, User, PhoneCall, ShieldCheck } from 'lucide-react';
+import { apiFetch } from '../utils/apiClient';
 
 interface ConsultationModalProps {
   isOpen: boolean;
@@ -35,7 +36,7 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/consultation', {
+      const data = await apiFetch('/api/consultation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -47,7 +48,6 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({
           preferredTime
         }),
       });
-      const data = await res.json();
       if (data && data.success) {
         setIsSubmitted(true);
       } else {

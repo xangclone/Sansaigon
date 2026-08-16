@@ -3,6 +3,7 @@ import { X, Upload, Image as ImageIcon, Plus, Trash2, CheckCircle2, ShieldCheck,
 import { RoomListing, ListingType, RoomStatus } from '../types';
 import { SAIGON_DISTRICTS } from '../data/mockListings';
 import { AmenitySelector } from './AmenitySelector';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface AddListingModalProps {
   isOpen: boolean;
@@ -49,20 +50,30 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Handle local image file upload & convert to Base64
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+
+  // Handle local image file upload & convert to Base64 (Compressed)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setImages((prev) => [...prev, event.target!.result as string]);
+    setIsUploadingImages(true);
+    try {
+      const compressedList: string[] = [];
+      for (const file of Array.from(files) as File[]) {
+        const compressed = await compressImageFile(file);
+        if (compressed) {
+          compressedList.push(compressed);
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      }
+      if (compressedList.length > 0) {
+        setImages((prev) => [...prev, ...compressedList]);
+      }
+    } catch (err) {
+      console.error('Lỗi khi nén hình ảnh:', err);
+    } finally {
+      setIsUploadingImages(false);
+    }
   };
 
   const handleAddImageUrl = () => {
@@ -384,13 +395,23 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
 
             {/* Upload Buttons */}
             <div className="flex flex-col sm:flex-row items-center gap-2 mb-3">
-              <label className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors">
-                <Upload className="w-4 h-4" />
-                <span>TẢI ẢNH TỪ THIẾT BỊ (ĐIỆN THOẠI / MÁY TÍNH)</span>
+              <label className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors disabled:opacity-50">
+                {isUploadingImages ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    <span>ĐANG TẢI & NÉN ẢNH...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" />
+                    <span>TẢI ẢNH TỪ THIẾT BỊ (ĐIỆN THOẠI / MÁY TÍNH)</span>
+                  </>
+                )}
                 <input
                   type="file"
                   accept="image/*"
                   multiple
+                  disabled={isUploadingImages}
                   onChange={handleFileUpload}
                   className="hidden"
                 />

@@ -12,6 +12,7 @@ import { FloatingContactWidget } from './components/FloatingContactWidget';
 import { Footer } from './components/Footer';
 import { RoomListing, FilterState, ListingType, RoomStatus, ContactSettings } from './types';
 import { INITIAL_ROOMS } from './data/mockListings';
+import { apiFetch } from './utils/apiClient';
 import { Building2, Users, ArrowRightLeft, Sparkles, Filter, SlidersHorizontal, MapPin, RefreshCw, AlertCircle, FileSpreadsheet } from 'lucide-react';
 
 export default function App() {
@@ -56,13 +57,12 @@ export default function App() {
     enableFanpage: true,
   });
 
-  // Fetch rooms from Express backend API
+  // Fetch rooms from Express backend API or LocalStorage
   const fetchRooms = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/rooms');
-      const data = await res.json();
-      if (data.success && Array.isArray(data.rooms)) {
+      const data = await apiFetch('/api/rooms');
+      if (data && data.success && Array.isArray(data.rooms)) {
         setRooms(data.rooms);
       }
     } catch (err) {
@@ -75,9 +75,8 @@ export default function App() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/settings');
-      const data = await res.json();
-      if (data.success && data.settings) {
+      const data = await apiFetch('/api/settings');
+      if (data && data.success && data.settings) {
         if (data.settings.adminSecretPath) {
           setAdminSecretPath(data.settings.adminSecretPath);
         }
@@ -101,31 +100,41 @@ export default function App() {
     fetchRooms();
     fetchSettings();
     // Track site visit for analytics
-    fetch('/api/analytics/visit', { method: 'POST' }).catch(() => {});
+    apiFetch('/api/analytics/visit', { method: 'POST' }).catch(() => {});
   }, []);
 
   // Track room detail view when selectedRoom changes
   useEffect(() => {
     if (selectedRoom?.id) {
-      fetch(`/api/rooms/${selectedRoom.id}/view`, { method: 'POST' }).catch(() => {});
+      apiFetch(`/api/rooms/${selectedRoom.id}/view`, { method: 'POST' }).catch(() => {});
     }
   }, [selectedRoom?.id]);
 
-  // Handle route for Admin page access using Secret Link ONLY (e.g., /#quan-tri-bao-mat-2026 or ?secret=...)
+  // Handle route for Admin page access using Secret Link (e.g., /quan-tri-bao-mat-2026, /#quan-tri-bao-mat-2026 or ?admin_secret=...)
   useEffect(() => {
     const checkAdminRoute = () => {
-      const path = window.location.pathname.toLowerCase();
-      const hash = window.location.hash.toLowerCase();
+      const path = window.location.pathname.toLowerCase().replace(/^\/+|\/+$/g, '');
+      const hash = window.location.hash.toLowerCase().replace(/^#+/, '');
       const search = window.location.search.toLowerCase();
-      const cleanSecret = adminSecretPath.toLowerCase();
+      const cleanSecret = (adminSecretPath || 'quan-tri-bao-mat-2026').toLowerCase().replace(/^\/+|\/+$/g, '');
 
-      // STRICT SECURITY: Only match the secret custom URL hash/path
-      if (
-        (cleanSecret && hash === `#${cleanSecret}`) ||
-        (cleanSecret && path.endsWith(`/${cleanSecret}`)) ||
-        (cleanSecret && search.includes(`admin_secret=${cleanSecret}`)) ||
-        hash === '#quan-tri-bao-mat-2026'
-      ) {
+      // Check if URL matches secret path, hash, or query parameter
+      const isMatch =
+        (cleanSecret && (
+          path === cleanSecret ||
+          path.endsWith(`/${cleanSecret}`) ||
+          hash === cleanSecret ||
+          search.includes(`admin_secret=${cleanSecret}`) ||
+          search.includes(cleanSecret)
+        )) ||
+        path === 'quan-tri-bao-mat-2026' ||
+        path.includes('quan-tri-bao-mat-2026') ||
+        hash === 'quan-tri-bao-mat-2026' ||
+        hash.includes('quan-tri-bao-mat-2026') ||
+        path === 'admin' ||
+        hash === 'admin';
+
+      if (isMatch) {
         setViewMode('admin');
       }
     };
@@ -217,13 +226,12 @@ export default function App() {
   // Create Room Handler
   const handleAddRoom = async (newRoomData: Partial<RoomListing>) => {
     try {
-      const res = await fetch('/api/rooms', {
+      const data = await apiFetch('/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRoomData),
       });
-      const data = await res.json();
-      if (data.success && data.room) {
+      if (data && data.success && data.room) {
         setRooms((prev) => [data.room, ...prev]);
         return true;
       }
@@ -244,8 +252,11 @@ export default function App() {
       <AdminPage
         onBackToClient={() => {
           setViewMode('client');
-          if (window.location.hash === '#admin') {
+          if (window.location.hash) {
             window.location.hash = '';
+          }
+          if (window.location.pathname !== '/' || window.location.search) {
+            window.history.pushState({}, '', '/');
           }
         }}
         rooms={rooms}
