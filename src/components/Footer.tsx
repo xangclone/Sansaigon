@@ -139,7 +139,7 @@ export const Footer: React.FC<FooterProps> = ({
                   <span className="text-[10px] text-slate-400 block font-semibold uppercase tracking-wider">Fanpage Facebook Chính Thức</span>
                   <a href={fanpageUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-extrabold text-indigo-400 hover:underline flex items-center gap-1.5 mt-0.5 truncate">
                     <Facebook className="w-4 h-4 text-indigo-400 shrink-0" />
-                    <span className="truncate">Facebook Sàn Sài Gòn</span>
+                    <span className="truncate">Facebook San Sài Gòn</span>
                   </a>
                 </div>
               )}

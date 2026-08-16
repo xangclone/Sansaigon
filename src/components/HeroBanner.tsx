@@ -37,7 +37,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             Danh Sách Phòng Trọ, KTX & Pass Phòng <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-rose-300 to-amber-200">Cập Nhật Trực Tiếp</span>
           </h1>
           <p className="mt-2 text-sm sm:text-base text-slate-300 font-medium">
-            San Sài gòn tổng hợp & cập nhật số lượng phòng còn trống liên tục, thông tin chính xác, hỗ trợ xem phòng trực tiếp miễn phí.
+            San Sài Gòn tổng hợp & cập nhật số lượng phòng còn trống liên tục, thông tin chính xác, hỗ trợ xem phòng trực tiếp miễn phí.
           </p>
         </div>
 

@@ -61,7 +61,7 @@ export const FloatingContactWidget: React.FC<FloatingContactWidgetProps> = ({
                 className="w-9 h-9 rounded-full border-2 border-amber-400 object-cover bg-slate-950"
               />
               <div>
-                <h4 className="text-sm font-black tracking-tight text-white">LIÊN HỆ TƯ VẤN KHANH</h4>
+                <h4 className="text-sm font-black tracking-tight text-white">LIÊN HỆ TƯ VẤN NHANH</h4>
                 <p className="text-[11px] text-amber-400 font-medium">Sàn Sài Gòn — Hỗ trợ 24/7</p>
               </div>
             </div>
