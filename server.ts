@@ -1,12 +1,22 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
 import { INITIAL_ROOMS } from './src/data/mockListings';
 import { RoomListing, GoogleSheetSyncConfig } from './src/types';
 
 const app = express();
 const PORT = 3000;
+
+// Enable CORS for Vercel / Cloud Run / Multi-domain hosting
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // Increase JSON body limit for image uploads
 app.use(express.json({ limit: '50mb' }));
@@ -793,9 +803,18 @@ app.get('/api/analytics/stats', (req, res) => {
   });
 });
 
+// Global error handling middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[Server Error]', err);
+  if (!res.headersSent) {
+    res.status(500).json({ success: false, error: err?.message || 'Lỗi hệ thống máy chủ' });
+  }
+});
+
 // ================= VITE / SERVING =================
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
